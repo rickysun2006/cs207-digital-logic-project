@@ -23,6 +23,7 @@
 *.wdb
 *.vcd
 *.wlf
+*.vvp
 work/
 transcript
 modelsim.ini

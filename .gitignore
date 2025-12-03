@@ -1,1 +1,44 @@
+# Xilinx Vivado generated files
+*.jou
+*.log
+*.str
+*.pb
+*.dcp
+*.bit
+*.bin
+*.mcs
+*.prm
+*.os
+.Xil/
+
+# Vivado Project Directories (generated content)
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/
+
+# Simulation files
+*.wdb
+*.vcd
+*.wlf
+work/
+transcript
+modelsim.ini
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editors
+.vscode/
+*.swp
+*~
+
+# Project specific
 ref/

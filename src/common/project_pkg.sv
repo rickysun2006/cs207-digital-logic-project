@@ -54,12 +54,12 @@ package project_pkg;
   // 矩阵整体类型
   typedef struct packed {
     // --- 控制信息 ---
-    logic [ROW_IDX_W-1:0] rows;      // 3 bit, 最多支持8行
-    logic [COL_IDX_W-1:0] cols;      // 3 bit, 最多支持8列
+    logic [ROW_IDX_W-1:0] rows;      // 实际行数, 3 bit, 最多支持8行
+    logic [COL_IDX_W-1:0] cols;      // 实际列数, 3 bit, 最多支持8列
     logic                 is_valid;  // 1 bit, 标记这个位置是否为空
 
     // --- Payload ---
-    // MAX_ROWS x MAX_COLS 的二维数组，每个元素 8 bit
+    // MAX_ROWS x MAX_COLS 的二维数组, 每个元素 8 bit, 逻辑空位置置0
     matrix_element_t [MAX_ROWS-1:0][MAX_COLS-1:0] cells;
 
   } matrix_t;  // 总位宽 = 3+3+1 + (25*8) = 207 bits
@@ -87,7 +87,8 @@ package project_pkg;
     STATE_CALC_SELECT,  // 4.1 选择运算类型
     STATE_CALC_INPUT,   // 4.2 选择运算数 (含倒计时错误处理)
     STATE_CALC_EXEC,    // 4.3 执行计算
-    STATE_CALC_RESULT   // 4.4 显示结果
+    STATE_CALC_RESULT,  // 4.4 显示结果
+    STATE_CALC_ERROR    // 4.5 错误处理
   } sys_state_t;
 
   //-------------------------------------------------------------------------

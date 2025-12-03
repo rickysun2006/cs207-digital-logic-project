@@ -35,6 +35,12 @@ module main_fsm (
     input logic gen_done,
     input logic display_done,
 
+    // --- New States From Other Modules (Added) ---
+    input logic calc_input_done,
+    input logic matrix_valid_flag,
+    input logic alu_done,
+    input logic timer_done,
+
     // --- State Outputs ---
     output sys_state_t current_state,
     output op_code_t   operation_code
@@ -82,7 +88,8 @@ module main_fsm (
         op_next = OP_NONE;
 
         if (sw_mode_sel[7]) begin
-          if (btn_pos) state_next = STATE_CALC_SELECT;
+          // Directly enter CALC_SELECT without btn_pos
+          state_next = STATE_CALC_SELECT;
         end else if (sw_mode_sel[6]) begin
           if (btn_pos) state_next = STATE_DISPLAY;
         end else if (sw_mode_sel[5]) begin
@@ -112,6 +119,9 @@ module main_fsm (
         end  // back (with btn_reset_logic)
         else if (btn_reset_logic) begin
           state_next = STATE_IDLE;
+        end  // exit if all calc switches are off
+        else if (sw_mode_sel[7:3] == 0) begin
+          state_next = STATE_IDLE;
         end
       end
 
@@ -119,9 +129,14 @@ module main_fsm (
       // CALC_INPUT
       //----------------------------------------------------------------------
       STATE_CALC_INPUT: begin
-        // wait for input done signal
-        if (input_done) begin
-          state_next = STATE_CALC_EXEC;
+        if (calc_input_done) begin
+          if (matrix_valid_flag) begin
+            state_next = STATE_CALC_EXEC;
+          end else begin
+            state_next = STATE_CALC_ERROR;
+          end
+        end else if (btn_reset_logic) begin
+          state_next = STATE_CALC_SELECT;
         end
       end
 
@@ -129,28 +144,58 @@ module main_fsm (
       // CALC_EXEC
       //----------------------------------------------------------------------
       STATE_CALC_EXEC: begin
-        // wait for generation done signal
-        if (gen_done) begin
+        if (alu_done) begin
           state_next = STATE_CALC_RESULT;
         end
       end
 
       //----------------------------------------------------------------------
-      // 其他状态占位
+      // CALC_RESULT
+      //----------------------------------------------------------------------
+      STATE_CALC_RESULT: begin
+        if (btn_pos || btn_reset_logic) begin
+          state_next = STATE_CALC_SELECT;
+        end
+      end
+
+      //----------------------------------------------------------------------
+      // CALC_ERROR
+      //----------------------------------------------------------------------
+      STATE_CALC_ERROR: begin
+        if (timer_done) begin
+          state_next = STATE_CALC_SELECT;
+        end else if (btn_pos) begin
+          if (matrix_valid_flag) state_next = STATE_CALC_EXEC;
+        end else if (btn_reset_logic) begin
+          state_next = STATE_CALC_SELECT;
+        end
+      end
+
+      //----------------------------------------------------------------------
+      // INPUT
       //----------------------------------------------------------------------
       STATE_INPUT: begin
-        // 逻辑处理...
-        // if (input_done) state_next = STATE_IDLE;
+        if (btn_reset_logic || input_done) begin
+          state_next = STATE_IDLE;
+        end
       end
 
+      //----------------------------------------------------------------------
+      // GEN
+      //----------------------------------------------------------------------
       STATE_GEN: begin
+        if (btn_reset_logic || gen_done) begin
+          state_next = STATE_IDLE;
+        end
       end
 
+      //----------------------------------------------------------------------
+      // DISPLAY
+      //----------------------------------------------------------------------
       STATE_DISPLAY: begin
-      end
-
-      STATE_CALC_INPUT: begin
-        // 进入输入参数环节
+        if (btn_reset_logic || display_done) begin
+          state_next = STATE_IDLE;
+        end
       end
 
       default: state_next = STATE_IDLE;

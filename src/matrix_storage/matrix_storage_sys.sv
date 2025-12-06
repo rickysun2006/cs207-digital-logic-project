@@ -1,0 +1,143 @@
+/*=============================================================================
+#
+# Project Name   : CS207_Project_Matrix_Calculator
+# File Name      : matrix_storage_sys.sv
+# Module Name    : matrix_storage_sys
+# University     : SUSTech
+#
+# Create Date    : 2025-11-23
+#
+# Description    :
+#     Other modules visit matrix storage through this module.
+#
+# Revision History:
+# -----------------------------------------------------------------------------
+# Ver   |   Date     |   Author       |   Description
+# -----------------------------------------------------------------------------
+# v1.0  | 2025-12-06 | DraTelligence  |   Initial creation
+#
+#=============================================================================*/
+`include "../common/project_pkg.sv"
+import project_pkg::*;
+
+module matrix_manage_sys (
+    input wire clk,
+    input wire rst_n,
+
+    // Write Interface
+    input wire       wr_en,  // 全局写使能 (总开关)
+    input wire [2:0] wr_id,  // 写入的目标矩阵 ID (0-7)
+
+    // --- 写入模式控制 ---
+    input wire wr_cmd_clear,     // clear the matrix (valid bit to 0)
+    input wire wr_cmd_set_dims,  // set dimensions only and clear data
+    input wire wr_cmd_load_all,  // load entire matrix_t (from ALU)
+    input wire wr_cmd_single,    // write single element
+
+    // --- 数据输入 ---
+    // set_dims
+    input wire [ROW_IDX_W-1:0] wr_dims_r,
+    input wire [COL_IDX_W-1:0] wr_dims_c,
+
+    // single
+    input wire             [ROW_IDX_W-1:0] wr_row_idx,
+    input wire             [COL_IDX_W-1:0] wr_col_idx,
+    input matrix_element_t                 wr_val_scalar,
+
+    // load_all
+    input wire [MAT_ID_W-1:0] wr_target_id,
+    input matrix_t wr_val_matrix,
+
+    // Read Interface
+    // Port A and Default
+    input  wire     [MAT_ID_W -1 : 0] rd_id_A,
+    output matrix_t                   rd_data_A,
+    output logic                      rd_valid_A,
+
+    // Port B
+    input  wire     [MAT_ID_W -1 : 0] rd_id_B,
+    output matrix_t                   rd_data_B,
+    output logic                      rd_valid_B
+
+    // TODO: bonus features (dynamic resizing)
+    // input wire [2:0] cfg_limit
+);
+
+  // Internal Storage Structure
+  matrix_t storage[0:MAT_TOTAL_SLOTS-1];
+
+  // dynamic storage limit (future use)
+  logic [PTR_W-1:0] active_limit = DEFAULT_LIMIT;
+  logic [PTR_W-1:0] ptr_table[0:MAT_SIZE_CNT-1];
+
+  // 记录正在写入的矩阵 ID
+  logic [MAT_ID_W-1:0] latched_wr_id;
+
+  // 寻址函数
+  function automatic logic [4:0] get_type_idx(input [ROW_IDX_W-1:0] r, input [COL_IDX_W-1:0] c);
+    return (r - 1) * MAX_COLS + (c - 1);
+  endfunction
+
+  function automatic logic [MAT_ID_W-1:0] get_base_addr(input [4:0] type_idx);
+    return type_idx * PHYSICAL_MAX_PER_DIM;
+  endfunction
+
+  // Write Logic
+  integer i;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      latched_wr_id <= '0;
+      active_limit  <= DEFAULT_LIMIT;
+
+      // clear all pointers and storage
+      for (i = 0; i < MAT_SIZE_CNT; i++) ptr_table[i] <= 0;
+      for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i] <= '0;
+
+    end else if (wr_en) begin
+
+      // 未来预留的配置接口
+      // if (cfg_limit_valid) active_limit <= cfg_limit;
+
+      // --- 清空矩阵 ---
+      if (wr_cmd_clear) begin
+        storage[wr_target_id] <= '0;
+      end // --- 设置维度 ---
+      else if (wr_cmd_set_dims) begin
+        logic [         4:0] t_idx;
+        logic [MAT_ID_W-1:0] base;
+        logic [   PTR_W-1:0] ptr;  // 3-bit 指针
+        logic [MAT_ID_W-1:0] target;
+
+        t_idx = get_type_idx(wr_dims_r, wr_dims_c);
+        base = get_base_addr(t_idx);
+        ptr = ptr_table[t_idx];
+
+        // 计算目标地址
+        target = base + ptr;
+        latched_wr_id            <= target;
+
+        // 写入元数据
+        storage[target].rows     <= wr_dims_r;
+        storage[target].cols     <= wr_dims_c;
+        storage[target].is_valid <= 1'b1;
+        storage[target].cells    <= '0;
+
+        if (ptr + 1 >= active_limit) begin
+          ptr_table[t_idx] <= 0;
+        end else begin
+          ptr_table[t_idx] <= ptr + 1;
+        end
+      end  // --- 单点写入 ---
+      else if (wr_cmd_single) begin
+        if (storage[latched_wr_id].is_valid) begin
+          storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
+        end
+      end  // --- 全量写入 ---
+      else if (wr_cmd_load_all) begin
+        storage[wr_target_id] <= wr_val_matrix;
+      end
+
+    end
+  end
+
+endmodule

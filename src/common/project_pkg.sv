@@ -16,8 +16,11 @@
 # -----------------------------------------------------------------------------
 # v1.0  | 2025-11-23 |  DraTelligence |   Initial creation
 # v1.1  | 2025-12-01 |  DraTelligence |   Added code for seven-segment display characters
+# v1.2  | 2025-12-06 |  DraTelligence |   Added matrix storage parameters and types
 #
 #=============================================================================*/
+`ifndef PROJECT_PKG_SV
+`define PROJECT_PKG_SV
 
 package project_pkg;
 
@@ -43,10 +46,29 @@ package project_pkg;
   localparam int DATA_WIDTH = 8;
 
   //-------------------------------------------------------------------------
+  // 矩阵存储配置
+  //-------------------------------------------------------------------------
+  // 物理存储上限
+  localparam int PHYSICAL_MAX_PER_DIM = 8;
+  localparam int PTR_W = 3;
+
+  // 总矩阵存储槽位数
+  localparam int MAT_SIZE_CNT = MAX_ROWS * MAX_COLS;  // 矩阵规格数
+  localparam int MAT_TOTAL_SLOTS = MAT_SIZE_CNT * PHYSICAL_MAX_PER_DIM;  // 存储上限
+  localparam int MAT_ID_W = $clog2(MAT_TOTAL_SLOTS + 1);  // 矩阵 ID 位宽
+
+  // 默认逻辑上限，配置此处
+  localparam int DEFAULT_LIMIT = 2;
+
+  //-------------------------------------------------------------------------
   // 矩阵元素定义
   //-------------------------------------------------------------------------
   // 矩阵元素类型
   typedef logic signed [DATA_WIDTH-1:0] matrix_element_t;
+
+  // 矩阵元素范围（随机数范围）
+  localparam matrix_element_t DEFAULT_VAL_MIN = 8'sd0;
+  localparam matrix_element_t DEFAULT_VAL_MAX = 8'sd9;
 
   // 矩阵维度类型
   typedef logic [2:0] dim_t;
@@ -122,3 +144,5 @@ package project_pkg;
   localparam code_t CHAR_BLK = 5'd31;  // Blank (黑屏)
 
 endpackage
+
+`endif  // PROJECT_PKG_SV

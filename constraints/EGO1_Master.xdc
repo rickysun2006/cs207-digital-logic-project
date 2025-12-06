@@ -181,23 +181,23 @@ set_property IOSTANDARD LVCMOS33 [get_ports {seg1[7]}]
 
 # --- Anodes (Enables) ---
 # Right Group (AN0 - AN3)
-set_property PACKAGE_PIN G6 [get_ports {an[0]}]
+set_property PACKAGE_PIN G2 [get_ports {an[0]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[0]}]
-set_property PACKAGE_PIN E1 [get_ports {an[1]}]
+set_property PACKAGE_PIN C2 [get_ports {an[1]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[1]}]
-set_property PACKAGE_PIN F1 [get_ports {an[2]}]
+set_property PACKAGE_PIN C1 [get_ports {an[2]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[2]}]
-set_property PACKAGE_PIN G1 [get_ports {an[3]}]
+set_property PACKAGE_PIN H1 [get_ports {an[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[3]}]
 
 # Left Group (AN4 - AN7)
-set_property PACKAGE_PIN H1 [get_ports {an[4]}]
+set_property PACKAGE_PIN G1 [get_ports {an[4]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[4]}]
-set_property PACKAGE_PIN C1 [get_ports {an[5]}]
+set_property PACKAGE_PIN F1 [get_ports {an[5]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[5]}]
-set_property PACKAGE_PIN C2 [get_ports {an[6]}]
+set_property PACKAGE_PIN E1 [get_ports {an[6]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[6]}]
-set_property PACKAGE_PIN G2 [get_ports {an[7]}]
+set_property PACKAGE_PIN G6 [get_ports {an[7]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {an[7]}]
 
 # ----------------------------------------------------------------------------

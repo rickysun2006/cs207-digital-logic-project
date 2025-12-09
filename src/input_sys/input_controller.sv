@@ -124,6 +124,9 @@ module input_controller (
   // ASCII -> Value (简单取低4位, '0'=0x30 -> 0)
   wire  [3:0] uart_val = uart_data[3:0];
 
+  // Virtual Confirm: CR (0x0D) or LF (0x0A)
+  wire virtual_confirm = uart_valid && (uart_data == 8'h0D || uart_data == 8'h0A);
+
   // LFSR 随机数
   logic [7:0] lfsr;
   always_ff @(posedge clk or negedge rst_n) begin
@@ -220,7 +223,7 @@ module input_controller (
         // 数据填充
         // ------------------------------------------------------------
         INPUT_LOOP: begin
-          if (uart_valid) begin
+          if (uart_valid && !virtual_confirm) begin
             // 只有在没满的情况下才写
             if (count_curr < count_total) begin
               wr_en         <= 1;
@@ -238,7 +241,7 @@ module input_controller (
                 curr_c <= curr_c + 1;
               end
             end
-          end else if (btn_confirm) begin
+          end else if (btn_confirm || virtual_confirm) begin
             // 用户提前确认，检查是否需要补零
             if (count_curr >= count_total) state <= FINISH;
             else state <= PAD_ZEROS;
@@ -293,10 +296,10 @@ module input_controller (
         // 选数流程
         // ------------------------------------------------------------
         SEL_GET_A: begin
-          if (uart_valid) begin
+          if (uart_valid && !virtual_confirm) begin
             selected_id_A <= uart_val[MAT_ID_W-1:0];
           end
-          if (btn_confirm) state <= SEL_CHECK_OP;
+          if (btn_confirm || virtual_confirm) state <= SEL_CHECK_OP;
         end
 
         SEL_CHECK_OP: begin
@@ -307,15 +310,19 @@ module input_controller (
         end
 
         SEL_GET_B: begin
-          if (uart_valid) selected_id_B <= uart_val[MAT_ID_W-1:0];
-          if (btn_confirm) state <= FINISH;
+          if (uart_valid && !virtual_confirm) selected_id_B <= uart_val[MAT_ID_W-1:0];
+          if (btn_confirm || virtual_confirm) state <= FINISH;
         end
 
         SEL_GET_SCALAR: begin
           // 等待用户拨码并确认
           // TODO: 添加实时显示目前拨码数字
+          if (uart_valid && !virtual_confirm) selected_scalar <= uart_val;
+
           if (btn_confirm) begin
             selected_scalar <= sw_scalar;
+            state <= FINISH;
+          end else if (virtual_confirm) begin
             state <= FINISH;
           end
         end

@@ -127,7 +127,9 @@ module input_controller (
   // Virtual Confirm: CR (0x0D) or LF (0x0A)
   wire virtual_confirm = uart_valid && (uart_data == 8'h0D || uart_data == 8'h0A);
 
-  // LFSR 随机数
+  //=========================================================================
+  // LFSR随机数生成器
+  //=========================================================================
   logic [7:0] lfsr;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) lfsr <= 8'hA5;

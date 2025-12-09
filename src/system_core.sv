@@ -214,9 +214,125 @@ module system_core (
       .uart_tx_busy(tx_busy)
   );
   
-  // Placeholder for UART TX
-  assign tx_en = 0;
-  assign tx_byte = 0;
+  //==========================================================================
+  // UART TX FSM (Result Transmission)
+  //==========================================================================
+  typedef enum logic [3:0] {
+    TX_IDLE,
+    TX_PREPARE,
+    TX_SEND_HEADER,
+    TX_WAIT_HEADER,
+    TX_SEND_ROWS,
+    TX_WAIT_ROWS,
+    TX_SEND_COLS,
+    TX_WAIT_COLS,
+    TX_SEND_DATA,
+    TX_WAIT_DATA,
+    TX_CHECK_LOOP,
+    TX_DONE
+  } tx_state_t;
+
+  tx_state_t tx_state;
+  logic [ROW_IDX_W-1:0] tx_r;
+  logic [COL_IDX_W-1:0] tx_c;
+  logic tx_en_reg;
+  logic [7:0] tx_byte_reg;
+
+  assign tx_en = tx_en_reg;
+  assign tx_byte = tx_byte_reg;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      tx_state    <= TX_IDLE;
+      tx_en_reg   <= 0;
+      tx_byte_reg <= 0;
+      tx_r        <= 0;
+      tx_c        <= 0;
+    end else begin
+      // Default
+      tx_en_reg <= 0;
+
+      case (tx_state)
+        TX_IDLE: begin
+          if (alu_done) begin
+            tx_state <= TX_PREPARE;
+          end
+        end
+
+        TX_PREPARE: begin
+          // Initialize counters
+          tx_r <= 0;
+          tx_c <= 0;
+          tx_state <= TX_SEND_HEADER;
+        end
+
+        // --- 1. Send Header (0xAA) ---
+        TX_SEND_HEADER: begin
+          tx_byte_reg <= 8'hAA;
+          tx_en_reg   <= 1;
+          tx_state    <= TX_WAIT_HEADER;
+        end
+
+        TX_WAIT_HEADER: begin
+          if (!tx_busy) tx_state <= TX_SEND_ROWS;
+        end
+
+        // --- 2. Send Rows (M) ---
+        TX_SEND_ROWS: begin
+          tx_byte_reg <= {{(8-ROW_IDX_W){1'b0}}, alu_result_matrix.rows};
+          tx_en_reg   <= 1;
+          tx_state    <= TX_WAIT_ROWS;
+        end
+
+        TX_WAIT_ROWS: begin
+          if (!tx_busy) tx_state <= TX_SEND_COLS;
+        end
+
+        // --- 3. Send Cols (N) ---
+        TX_SEND_COLS: begin
+          tx_byte_reg <= {{(8-COL_IDX_W){1'b0}}, alu_result_matrix.cols};
+          tx_en_reg   <= 1;
+          tx_state    <= TX_WAIT_COLS;
+        end
+
+        TX_WAIT_COLS: begin
+          if (!tx_busy) tx_state <= TX_SEND_DATA;
+        end
+
+        // --- 4. Send Data Loop ---
+        TX_SEND_DATA: begin
+          tx_byte_reg <= alu_result_matrix.cells[tx_r][tx_c];
+          tx_en_reg   <= 1;
+          tx_state    <= TX_WAIT_DATA;
+        end
+
+        TX_WAIT_DATA: begin
+          if (!tx_busy) tx_state <= TX_CHECK_LOOP;
+        end
+
+        TX_CHECK_LOOP: begin
+          if (tx_c == alu_result_matrix.cols - 1) begin
+            tx_c <= 0;
+            if (tx_r == alu_result_matrix.rows - 1) begin
+              tx_state <= TX_DONE;
+            end else begin
+              tx_r <= tx_r + 1;
+              tx_state <= TX_SEND_DATA;
+            end
+          end else begin
+            tx_c <= tx_c + 1;
+            tx_state <= TX_SEND_DATA;
+          end
+        end
+
+        TX_DONE: begin
+          tx_state <= TX_IDLE;
+        end
+        
+        default: tx_state <= TX_IDLE;
+      endcase
+    end
+  end
 
   seven_seg_display_driver u_seg_driver (
       .clk(clk),

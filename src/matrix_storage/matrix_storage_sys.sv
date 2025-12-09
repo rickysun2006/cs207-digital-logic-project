@@ -15,6 +15,7 @@
 # Ver   |   Date     |   Author       |   Description
 # -----------------------------------------------------------------------------
 # v1.0  | 2025-12-06 | DraTelligence  |   Initial creation
+# v1.1  | 2025-12-09 | AI Assistant   |   Removed redundant wr_en/wr_id logic
 #
 #=============================================================================*/
 `include "../common/project_pkg.sv"
@@ -23,10 +24,6 @@ import project_pkg::*;
 module matrix_manage_sys (
     input wire clk,
     input wire rst_n,
-
-    // Write Interface
-    input wire       wr_en,  // 全局写使能 (总开关)
-    input wire [2:0] wr_id,  // 写入的目标矩阵 ID (0-7)
 
     // --- 写入模式控制 ---
     input wire wr_cmd_clear,     // clear the matrix (valid bit to 0)
@@ -45,8 +42,8 @@ module matrix_manage_sys (
     input matrix_element_t                 wr_val_scalar,
 
     // load_all
-    input wire [MAT_ID_W-1:0] wr_target_id,
-    input matrix_t wr_val_matrix,
+    input wire     [MAT_ID_W-1:0] wr_target_id,
+    input matrix_t                wr_val_matrix,
 
     // Read Interface
     // Port A and Default
@@ -105,8 +102,7 @@ module matrix_manage_sys (
       // clear all pointers and storage
       for (i = 0; i < MAT_SIZE_CNT; i++) ptr_table[i] <= 0;
       for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i] <= '0;
-
-    end else if (wr_en) begin
+    end else begin
 
       // 未来预留的配置接口
       // if (cfg_limit_valid) active_limit <= cfg_limit;
@@ -114,11 +110,9 @@ module matrix_manage_sys (
       // --- 清空矩阵 ---
       if (wr_cmd_clear) begin
         storage[wr_target_id] <= '0;
-      end 
-      // --- 设置维度 ---
+      end  // --- 设置维度 ---
       else if (wr_cmd_set_dims) begin
         matrix_t new_mat;
-        
         latched_wr_id <= calc_target;
 
         // Update Pointer
@@ -134,15 +128,12 @@ module matrix_manage_sys (
         new_mat.cols = wr_dims_c;
         new_mat.is_valid = 1'b1;
         storage[calc_target] <= new_mat;
-
-      end  
-      // --- 单点写入 ---
+      end  // --- 单点写入 ---
       else if (wr_cmd_single) begin
         if (storage[latched_wr_id].is_valid) begin
           storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
         end
-      end  
-      // --- 全量写入 ---
+      end  // --- 全量写入 ---
       else if (wr_cmd_load_all) begin
         storage[wr_target_id] <= wr_val_matrix;
       end
@@ -151,10 +142,10 @@ module matrix_manage_sys (
   end
 
   // Read Interface
-  assign rd_data_A = storage[rd_id_A];
+  assign rd_data_A  = storage[rd_id_A];
   assign rd_valid_A = storage[rd_id_A].is_valid;
 
-  assign rd_data_B = storage[rd_id_B];
+  assign rd_data_B  = storage[rd_id_B];
   assign rd_valid_B = storage[rd_id_B].is_valid;
 
 endmodule

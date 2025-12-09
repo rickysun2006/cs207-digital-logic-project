@@ -158,29 +158,3 @@ module matrix_manage_sys (
   assign rd_valid_B = storage[rd_id_B].is_valid;
 
 endmodule
-
-  // Read Interface
-  // Workaround for iverilog crash on variable index access of unpacked array of packed structs
-  always_comb begin
-    rd_data_A = '0;
-    rd_valid_A = 0;
-    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
-      if (rd_id_A == k) begin
-        rd_data_A = storage[k];
-        rd_valid_A = storage[k].is_valid;
-      end
-    end
-  end
-
-  always_comb begin
-    rd_data_B = '0;
-    rd_valid_B = 0;
-    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
-      if (rd_id_B == k) begin
-        rd_data_B = storage[k];
-        rd_valid_B = storage[k].is_valid;
-      end
-    end
-  end
-
-endmodule

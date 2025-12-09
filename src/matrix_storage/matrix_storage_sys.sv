@@ -27,7 +27,7 @@ module matrix_manage_sys (
 
     // --- 写入模式控制 ---
     input wire wr_cmd_clear,     // clear the matrix (valid bit to 0)
-    input wire wr_cmd_set_dims,  // set dimensions only and clear data
+    input wire wr_cmd_new,       // create new matrix with given dims
     input wire wr_cmd_load_all,  // load entire matrix_t (from ALU)
     input wire wr_cmd_single,    // write single element
 
@@ -110,8 +110,8 @@ module matrix_manage_sys (
       // --- 清空矩阵 ---
       if (wr_cmd_clear) begin
         storage[wr_target_id] <= '0;
-      end  // --- 设置维度 ---
-      else if (wr_cmd_set_dims) begin
+      end  // --- 新建对应维度矩阵 ---
+      else if (wr_cmd_new) begin
         matrix_t new_mat;
         latched_wr_id <= calc_target;
 

@@ -83,8 +83,6 @@ module fpga_top (
           .btn_in(btn[i]),
           .btn_out(btn_clean[i])
       );
-      // 临时直连
-      // assign btn_clean[i] = btn[i];
     end
   endgenerate
 

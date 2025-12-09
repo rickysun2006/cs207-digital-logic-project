@@ -73,14 +73,27 @@ module matrix_manage_sys (
   // 记录正在写入的矩阵 ID
   logic [MAT_ID_W-1:0] latched_wr_id;
 
-  // 寻址函数
-  function automatic logic [4:0] get_type_idx(input [ROW_IDX_W-1:0] r, input [COL_IDX_W-1:0] c);
-    return (r - 1) * MAX_COLS + (c - 1);
-  endfunction
+  // 寻址逻辑 (Combinational)
+  logic [4:0] calc_t_idx;
+  logic [MAT_ID_W-1:0] calc_base;
+  logic [PTR_W-1:0] calc_ptr;
+  logic [MAT_ID_W-1:0] calc_target;
 
-  function automatic logic [MAT_ID_W-1:0] get_base_addr(input [4:0] type_idx);
-    return type_idx * PHYSICAL_MAX_PER_DIM;
-  endfunction
+  assign calc_t_idx = (wr_dims_r - 1) * MAX_COLS + (wr_dims_c - 1);
+  assign calc_base = calc_t_idx * PHYSICAL_MAX_PER_DIM;
+  assign calc_ptr = ptr_table[calc_t_idx];
+  assign calc_target = calc_base + calc_ptr;
+
+  /*
+  // Helper for reading current storage value (Combinational)
+  matrix_t current_storage_val;
+  always_comb begin
+    current_storage_val = '0;
+    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
+      if (latched_wr_id == k) current_storage_val = storage[k];
+    end
+  end
+  */
 
   // Write Logic
   integer i;
@@ -101,42 +114,72 @@ module matrix_manage_sys (
       // --- 清空矩阵 ---
       if (wr_cmd_clear) begin
         storage[wr_target_id] <= '0;
-      end // --- 设置维度 ---
+      end 
+      // --- 设置维度 ---
       else if (wr_cmd_set_dims) begin
-        logic [         4:0] t_idx;
-        logic [MAT_ID_W-1:0] base;
-        logic [   PTR_W-1:0] ptr;  // 3-bit 指针
-        logic [MAT_ID_W-1:0] target;
+        matrix_t new_mat;
+        
+        latched_wr_id <= calc_target;
 
-        t_idx = get_type_idx(wr_dims_r, wr_dims_c);
-        base = get_base_addr(t_idx);
-        ptr = ptr_table[t_idx];
-
-        // 计算目标地址
-        target = base + ptr;
-        latched_wr_id            <= target;
-
-        // 写入元数据
-        storage[target].rows     <= wr_dims_r;
-        storage[target].cols     <= wr_dims_c;
-        storage[target].is_valid <= 1'b1;
-        storage[target].cells    <= '0;
-
-        if (ptr + 1 >= active_limit) begin
-          ptr_table[t_idx] <= 0;
+        // Update Pointer
+        if (calc_ptr + 1 >= active_limit) begin
+          ptr_table[calc_t_idx] <= 0;
         end else begin
-          ptr_table[t_idx] <= ptr + 1;
+          ptr_table[calc_t_idx] <= calc_ptr + 1;
         end
-      end  // --- 单点写入 ---
+
+        // Write Metadata
+        new_mat = '0;
+        new_mat.rows = wr_dims_r;
+        new_mat.cols = wr_dims_c;
+        new_mat.is_valid = 1'b1;
+        storage[calc_target] <= new_mat;
+
+      end  
+      // --- 单点写入 ---
       else if (wr_cmd_single) begin
         if (storage[latched_wr_id].is_valid) begin
           storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
         end
-      end  // --- 全量写入 ---
+      end  
+      // --- 全量写入 ---
       else if (wr_cmd_load_all) begin
         storage[wr_target_id] <= wr_val_matrix;
       end
 
+    end
+  end
+
+  // Read Interface
+  assign rd_data_A = storage[rd_id_A];
+  assign rd_valid_A = storage[rd_id_A].is_valid;
+
+  assign rd_data_B = storage[rd_id_B];
+  assign rd_valid_B = storage[rd_id_B].is_valid;
+
+endmodule
+
+  // Read Interface
+  // Workaround for iverilog crash on variable index access of unpacked array of packed structs
+  always_comb begin
+    rd_data_A = '0;
+    rd_valid_A = 0;
+    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
+      if (rd_id_A == k) begin
+        rd_data_A = storage[k];
+        rd_valid_A = storage[k].is_valid;
+      end
+    end
+  end
+
+  always_comb begin
+    rd_data_B = '0;
+    rd_valid_B = 0;
+    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
+      if (rd_id_B == k) begin
+        rd_data_B = storage[k];
+        rd_valid_B = storage[k].is_valid;
+      end
     end
   end
 

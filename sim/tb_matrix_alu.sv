@@ -133,6 +133,28 @@ module tb_matrix_alu;
             result_matrix.cells[0][0], result_matrix.cells[0][1],
             result_matrix.cells[1][0], result_matrix.cells[1][1]);
 
+        // Test 4: Matrix Multiplication (5x5 * 5x5)
+        $display("Test 4: Matrix Multiplication (5x5 * 5x5) - All Ones");
+        matrix_A.rows = 5; matrix_A.cols = 5;
+        matrix_B.rows = 5; matrix_B.cols = 5;
+        
+        // Fill with 1s
+        matrix_A = {3'd5, 3'd5, 1'b1, {25{8'sd1}}};
+        matrix_B = {3'd5, 3'd5, 1'b1, {25{8'sd1}}};
+
+        op_code = OP_MAT_MUL;
+        start = 1;
+        #10 start = 0;
+        wait(done);
+        #10;
+
+        // Result should be all 5s
+        // 1*1 + 1*1 + 1*1 + 1*1 + 1*1 = 5
+        assert(result_matrix.cells[0][0] == 5) else $error("Mul5(0,0) failed");
+        assert(result_matrix.cells[4][4] == 5) else $error("Mul5(4,4) failed");
+        $display("Multiplication Result (5x5): (0,0)=%d, (4,4)=%d", 
+            result_matrix.cells[0][0], result_matrix.cells[4][4]);
+
         $finish;
     end
 

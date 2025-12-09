@@ -294,7 +294,7 @@ module input_controller (
         // ------------------------------------------------------------
         SEL_GET_A: begin
           if (uart_valid) begin
-            selected_id_A <= uart_val[MAT_ID_W-1:0];
+            selected_id_A <= uart_val;
           end
           if (btn_confirm) state <= SEL_CHECK_OP;
         end
@@ -307,7 +307,9 @@ module input_controller (
         end
 
         SEL_GET_B: begin
-          if (uart_valid) selected_id_B <= uart_val[MAT_ID_W-1:0];
+          if (uart_valid) begin
+            selected_id_A <= uart_val;
+          end
           if (btn_confirm) state <= FINISH;
         end
 

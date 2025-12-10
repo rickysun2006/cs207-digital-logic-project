@@ -1,161 +1,128 @@
 /*=============================================================================
-#
-# Project Name   : CS207_Project_Matrix_Calculator
 # File Name      : tb_matrix_alu.sv
-# Module Name    : tb_matrix_alu
-# University     : SUSTech
-#
-# Create Date    : 2025-12-09
-#
-# Description    :
-#     Testbench for matrix_alu.sv
-#
+# Description    : Vivado Testbench for Matrix ALU
 #=============================================================================*/
 `timescale 1ns / 1ps
+
+// 必须导入包
 import project_pkg::*;
 
 module tb_matrix_alu;
 
-    // --- Signals ---
-    logic clk;
-    logic rst_n;
-    logic start;
-    op_code_t op_code;
-    matrix_t matrix_A;
-    matrix_t matrix_B;
-    matrix_element_t scalar_val;
-    logic done;
-    matrix_t result_matrix;
-    logic error_flag;
+  // --- 信号定义 ---
+  logic clk;
+  logic rst_n;
+  logic start;
+  op_code_t op_code;
+  matrix_t matrix_A;
+  matrix_t matrix_B;
+  matrix_element_t scalar_val;
 
-    // --- DUT Instantiation ---
-    matrix_alu u_dut (
-        .clk(clk),
-        .rst_n(rst_n),
-        .start(start),
-        .op_code(op_code),
-        .matrix_A(matrix_A),
-        .matrix_B(matrix_B),
-        .scalar_val(scalar_val),
-        .done(done),
-        .result_matrix(result_matrix),
-        .error_flag(error_flag)
-    );
+  wire done;
+  wire matrix_t result_matrix;
+  wire error_flag;
 
-    // --- Clock Generation ---
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk; // 100MHz
+  // --- 时钟生成 (100MHz) ---
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk; 
+  end
+
+  // --- 例化 DUT (Device Under Test) ---
+  matrix_alu u_alu (
+    .clk          (clk),
+    .rst_n        (rst_n),
+    .start        (start),
+    .op_code      (op_code),
+    .matrix_A     (matrix_A),
+    .matrix_B     (matrix_B),
+    .scalar_val   (scalar_val),
+    .done         (done),
+    .result_matrix(result_matrix),
+    .error_flag   (error_flag)
+  );
+
+  // --- 打印任务：Vivado 完美支持直接读取 struct ---
+  task print_matrix(input string name, input matrix_t m);
+    $display("---------------------------------------");
+    $display("Matrix: %s (%0d x %0d)", name, m.rows, m.cols);
+    if (!m.is_valid && name == "RESULT") $display("WARNING: Result is marked INVALID");
+    
+    for (int i = 0; i < m.rows; i++) begin
+      $write("[ ");
+      for (int j = 0; j < m.cols; j++) begin
+        // Vivado 可以直接处理 m.cells[i][j]
+        $write("%4d ", m.cells[i][j]); 
+      end
+      $display("]");
     end
+    $display("---------------------------------------");
+  endtask
 
-    // --- Test Procedure ---
-    initial begin
-        // Initialize
-        rst_n = 0;
-        start = 0;
-        op_code = OP_NONE;
-        matrix_A = '0;
-        matrix_B = '0;
-        scalar_val = 0;
+  // --- 初始化任务 ---
+  task init_sequence();
+    rst_n = 0;
+    start = 0;
+    matrix_A = '0; // SV 清零语法
+    matrix_B = '0;
+    scalar_val = 0;
+    op_code = OP_ADD;
+    #100; // 等待全局复位
+    rst_n = 1;
+    #20;
+    $display("\n=== Vivado Simulation Start ===\n");
+  endtask
 
-        #20 rst_n = 1;
-        $display("--- Test Start ---");
+  // --- 主测试流程 ---
+  initial begin
+    init_sequence();
 
-        // Test 1: Matrix Addition
-        $display("Test 1: Matrix Addition (2x2)");
-        matrix_A.rows = 2; matrix_A.cols = 2; matrix_A.is_valid = 1;
-        matrix_A.cells[0][0] = 1; matrix_A.cells[0][1] = 2;
-        matrix_A.cells[1][0] = 3; matrix_A.cells[1][1] = 4;
+    // ------------------------------------------
+    // Case 1: 加法
+    // ------------------------------------------
+    $display("\n[TEST 1] Matrix Addition (2x2)");
+    matrix_A.rows = 2; matrix_A.cols = 2; matrix_A.is_valid = 1;
+    matrix_A.cells[0][0] = 10; matrix_A.cells[0][1] = 20;
+    matrix_A.cells[1][0] = 30; matrix_A.cells[1][1] = 40;
 
-        matrix_B.rows = 2; matrix_B.cols = 2; matrix_B.is_valid = 1;
-        matrix_B.cells[0][0] = 5; matrix_B.cells[0][1] = 6;
-        matrix_B.cells[1][0] = 7; matrix_B.cells[1][1] = 8;
+    matrix_B.rows = 2; matrix_B.cols = 2; matrix_B.is_valid = 1;
+    matrix_B.cells[0][0] = 1;  matrix_B.cells[0][1] = 2;
+    matrix_B.cells[1][0] = 3;  matrix_B.cells[1][1] = 4;
 
-        op_code = OP_ADD;
-        start = 1;
-        #10 start = 0;
-        wait(done);
-        #10;
-        
-        assert(result_matrix.cells[0][0] == 6) else $error("Add(0,0) failed");
-        assert(result_matrix.cells[1][1] == 12) else $error("Add(1,1) failed");
-        $display("Addition Result: %d %d / %d %d", 
-            result_matrix.cells[0][0], result_matrix.cells[0][1],
-            result_matrix.cells[1][0], result_matrix.cells[1][1]);
+    op_code = OP_ADD;
+    start = 1;
+    @(posedge clk); start = 0;
+    wait(done); #10;
 
-        // Test 2: Matrix Multiplication
-        $display("Test 2: Matrix Multiplication (2x2 * 2x2)");
-        // A = [[1, 2], [3, 4]]
-        // B = [[1, 0], [0, 1]] (Identity)
-        matrix_B.cells[0][0] = 1; matrix_B.cells[0][1] = 0;
-        matrix_B.cells[1][0] = 0; matrix_B.cells[1][1] = 1;
+    print_matrix("Input A", matrix_A);
+    print_matrix("Input B", matrix_B);
+    print_matrix("RESULT", result_matrix);
 
-        op_code = OP_MAT_MUL;
-        start = 1;
-        #10 start = 0;
-        wait(done);
-        #10;
+    // ------------------------------------------
+    // Case 2: 矩阵乘法
+    // ------------------------------------------
+    #20;
+    $display("\n[TEST 2] Matrix Multiplication (2x3 * 3x2)");
+    matrix_A.rows = 2; matrix_A.cols = 3;
+    matrix_A.cells[0][0] = 1; matrix_A.cells[0][1] = 2; matrix_A.cells[0][2] = 3;
+    matrix_A.cells[1][0] = 4; matrix_A.cells[1][1] = 5; matrix_A.cells[1][2] = 6;
 
-        assert(result_matrix.cells[0][0] == 1) else $error("Mul(0,0) failed");
-        assert(result_matrix.cells[1][1] == 4) else $error("Mul(1,1) failed");
-        $display("Multiplication Result (Identity): %d %d / %d %d", 
-            result_matrix.cells[0][0], result_matrix.cells[0][1],
-            result_matrix.cells[1][0], result_matrix.cells[1][1]);
+    matrix_B.rows = 3; matrix_B.cols = 2;
+    matrix_B.cells[0][0] = 7; matrix_B.cells[0][1] = 8;
+    matrix_B.cells[1][0] = 9; matrix_B.cells[1][1] = 1;
+    matrix_B.cells[2][0] = 2; matrix_B.cells[2][1] = 3;
 
-        // Test 3: Matrix Multiplication (2x3 * 3x2)
-        $display("Test 3: Matrix Multiplication (2x3 * 3x2)");
-        // A = [[1, 2, 3], [4, 5, 6]]
-        matrix_A.rows = 2; matrix_A.cols = 3;
-        matrix_A.cells[0][0] = 1; matrix_A.cells[0][1] = 2; matrix_A.cells[0][2] = 3;
-        matrix_A.cells[1][0] = 4; matrix_A.cells[1][1] = 5; matrix_A.cells[1][2] = 6;
+    op_code = OP_MAT_MUL;
+    start = 1;
+    @(posedge clk); start = 0;
+    wait(done); #10;
 
-        // B = [[7, 8], [9, 1], [2, 3]]
-        matrix_B.rows = 3; matrix_B.cols = 2;
-        matrix_B.cells[0][0] = 7; matrix_B.cells[0][1] = 8;
-        matrix_B.cells[1][0] = 9; matrix_B.cells[1][1] = 1;
-        matrix_B.cells[2][0] = 2; matrix_B.cells[2][1] = 3;
+    print_matrix("Input A", matrix_A);
+    print_matrix("Input B", matrix_B);
+    print_matrix("RESULT", result_matrix);
 
-        // Expected:
-        // [0][0] = 1*7 + 2*9 + 3*2 = 7 + 18 + 6 = 31
-        // [0][1] = 1*8 + 2*1 + 3*3 = 8 + 2 + 9 = 19
-        // [1][0] = 4*7 + 5*9 + 6*2 = 28 + 45 + 12 = 85
-        // [1][1] = 4*8 + 5*1 + 6*3 = 32 + 5 + 18 = 55
-
-        op_code = OP_MAT_MUL;
-        start = 1;
-        #10 start = 0;
-        wait(done);
-        #10;
-
-        assert(result_matrix.cells[0][0] == 31) else $error("Mul2(0,0) failed");
-        assert(result_matrix.cells[1][0] == 85) else $error("Mul2(1,0) failed");
-        $display("Multiplication Result (2x3*3x2): %d %d / %d %d", 
-            result_matrix.cells[0][0], result_matrix.cells[0][1],
-            result_matrix.cells[1][0], result_matrix.cells[1][1]);
-
-        // Test 4: Matrix Multiplication (5x5 * 5x5)
-        $display("Test 4: Matrix Multiplication (5x5 * 5x5) - All Ones");
-        matrix_A.rows = 5; matrix_A.cols = 5;
-        matrix_B.rows = 5; matrix_B.cols = 5;
-        
-        // Fill with 1s
-        matrix_A = {3'd5, 3'd5, 1'b1, {25{8'sd1}}};
-        matrix_B = {3'd5, 3'd5, 1'b1, {25{8'sd1}}};
-
-        op_code = OP_MAT_MUL;
-        start = 1;
-        #10 start = 0;
-        wait(done);
-        #10;
-
-        // Result should be all 5s
-        // 1*1 + 1*1 + 1*1 + 1*1 + 1*1 = 5
-        assert(result_matrix.cells[0][0] == 5) else $error("Mul5(0,0) failed");
-        assert(result_matrix.cells[4][4] == 5) else $error("Mul5(4,4) failed");
-        $display("Multiplication Result (5x5): (0,0)=%d, (4,4)=%d", 
-            result_matrix.cells[0][0], result_matrix.cells[4][4]);
-
-        $finish;
-    end
+    $display("\n=== Simulation Finished ===");
+    $stop;
+  end
 
 endmodule

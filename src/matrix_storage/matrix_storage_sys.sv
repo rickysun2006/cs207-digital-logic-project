@@ -26,51 +26,45 @@ module matrix_manage_sys (
     input wire rst_n,
 
     // --- 写入模式控制 ---
-    input wire wr_cmd_clear,     // clear the matrix (valid bit to 0)
-    input wire wr_cmd_new,       // create new matrix with given dims
-    input wire wr_cmd_load_all,  // load entire matrix_t (from ALU)
-    input wire wr_cmd_single,    // write single element
+    input wire wr_cmd_clear,     // 建议作为 Global Clear
+    input wire wr_cmd_new,
+    input wire wr_cmd_load_all,  // TODO: ALU计算完成后写回
+    input wire wr_cmd_single,
 
     // --- 数据输入 ---
-    // set_dims
-    input wire [ROW_IDX_W-1:0] wr_dims_r,
-    input wire [COL_IDX_W-1:0] wr_dims_c,
-
-    // single
+    input wire             [ROW_IDX_W-1:0] wr_dims_r,
+    input wire             [COL_IDX_W-1:0] wr_dims_c,
     input wire             [ROW_IDX_W-1:0] wr_row_idx,
     input wire             [COL_IDX_W-1:0] wr_col_idx,
     input matrix_element_t                 wr_val_scalar,
+    input wire             [ MAT_ID_W-1:0] wr_target_id,
+    input matrix_t                         wr_val_matrix,
 
-    // load_all
-    input wire     [MAT_ID_W-1:0] wr_target_id,
-    input matrix_t                wr_val_matrix,
-
-    // Read Interface
-    // Port A and Default
+    // --- 读接口 ---
     input  wire     [MAT_ID_W -1 : 0] rd_id_A,
     output matrix_t                   rd_data_A,
     output logic                      rd_valid_A,
 
-    // Port B
     input  wire     [MAT_ID_W -1 : 0] rd_id_B,
     output matrix_t                   rd_data_B,
-    output logic                      rd_valid_B
+    output logic                      rd_valid_B,
 
-    // TODO: bonus features (dynamic resizing)
-    // input wire [2:0] cfg_limit
+    // --- 统计信息输出 ---
+    output reg [MAT_ID_W -1 : 0] total_matrix_cnt,
+    output reg [          3 : 0] type_valid_cnt  [0:MAT_SIZE_CNT-1]
 );
 
-  // Internal Storage Structure
+  // Internal Storage
   matrix_t storage[0:MAT_TOTAL_SLOTS-1];
 
-  // dynamic storage limit (future use)
+  // Pointers & Limits
   logic [PTR_W-1:0] active_limit = DEFAULT_LIMIT;
   logic [PTR_W-1:0] ptr_table[0:MAT_SIZE_CNT-1];
 
-  // 记录正在写入的矩阵 ID
+  // 书签寄存器
   logic [MAT_ID_W-1:0] latched_wr_id;
 
-  // 寻址逻辑 (Combinational)
+  // 寻址逻辑
   logic [4:0] calc_t_idx;
   logic [MAT_ID_W-1:0] calc_base;
   logic [PTR_W-1:0] calc_ptr;
@@ -81,46 +75,45 @@ module matrix_manage_sys (
   assign calc_ptr = ptr_table[calc_t_idx];
   assign calc_target = calc_base + calc_ptr;
 
-  /*
-  // Helper for reading current storage value (Combinational)
-  matrix_t current_storage_val;
-  always_comb begin
-    current_storage_val = '0;
-    for (int k = 0; k < MAT_TOTAL_SLOTS; k++) begin
-      if (latched_wr_id == k) current_storage_val = storage[k];
-    end
-  end
-  */
+  // --- Read Logic ---
+  assign rd_data_A = storage[rd_id_A];
+  assign rd_valid_A = storage[rd_id_A].is_valid;
+  assign rd_data_B = storage[rd_id_B];
+  assign rd_valid_B = storage[rd_id_B].is_valid;
 
-  // Write Logic
+  // --- Write Logic ---
   integer i;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       latched_wr_id <= '0;
-      active_limit  <= DEFAULT_LIMIT;
+      active_limit <= DEFAULT_LIMIT;
 
-      // clear all pointers and storage
-      for (i = 0; i < MAT_SIZE_CNT; i++) ptr_table[i] <= 0;
+      total_matrix_cnt <= 0;
+      for (i = 0; i < MAT_SIZE_CNT; i++) begin
+        ptr_table[i] <= 0;
+        type_valid_cnt[i] <= 0;
+      end
+
       for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i] <= '0;
+
     end else begin
 
-      // 未来预留的配置接口
-      // if (cfg_limit_valid) active_limit <= cfg_limit;
-
-      // --- 清空矩阵 ---
+      // --- 清空矩阵 (Global Clear) ---
       if (wr_cmd_clear) begin
-        storage[wr_target_id] <= '0;
-      end  // --- 新建对应维度矩阵 ---
+        total_matrix_cnt <= 0;
+        for (i = 0; i < MAT_SIZE_CNT; i++) begin
+          ptr_table[i] <= 0;
+          type_valid_cnt[i] <= 0;
+        end
+        for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i].is_valid <= 1'b0;
+      end  // --- 新建矩阵 ---
       else if (wr_cmd_new) begin
         matrix_t new_mat;
         latched_wr_id <= calc_target;
 
         // Update Pointer
-        if (calc_ptr + 1 >= active_limit) begin
-          ptr_table[calc_t_idx] <= 0;
-        end else begin
-          ptr_table[calc_t_idx] <= calc_ptr + 1;
-        end
+        if (calc_ptr + 1 >= active_limit) ptr_table[calc_t_idx] <= 0;
+        else ptr_table[calc_t_idx] <= calc_ptr + 1;
 
         // Write Metadata
         new_mat = '0;
@@ -128,24 +121,23 @@ module matrix_manage_sys (
         new_mat.cols = wr_dims_c;
         new_mat.is_valid = 1'b1;
         storage[calc_target] <= new_mat;
+
+        // Update Counters
+        if (type_valid_cnt[calc_t_idx] < active_limit) begin
+          type_valid_cnt[calc_t_idx] <= type_valid_cnt[calc_t_idx] + 1;
+          total_matrix_cnt <= total_matrix_cnt + 1;
+        end
       end  // --- 单点写入 ---
       else if (wr_cmd_single) begin
         if (storage[latched_wr_id].is_valid) begin
           storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
         end
-      end  // --- 全量写入 ---
+      end  // --- 全量写入 (Load All) ---
       else if (wr_cmd_load_all) begin
         storage[wr_target_id] <= wr_val_matrix;
       end
 
     end
   end
-
-  // Read Interface
-  assign rd_data_A  = storage[rd_id_A];
-  assign rd_valid_A = storage[rd_id_A].is_valid;
-
-  assign rd_data_B  = storage[rd_id_B];
-  assign rd_valid_B = storage[rd_id_B].is_valid;
 
 endmodule

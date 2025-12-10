@@ -8,7 +8,6 @@ import threading
 # Configuration & Constants
 # ==============================================================================
 DEFAULT_BAUDRATE = 115200
-HEADER_BYTE = 0xAA
 
 # ==============================================================================
 # Serial Manager
@@ -52,40 +51,21 @@ class SerialManager:
         return False
 
     def _read_loop(self):
-        buffer = []
-        state = "IDLE" # IDLE, HEADER, ROWS, COLS, DATA
-        rows = 0
-        cols = 0
-        
         while not self.stop_event.is_set():
             try:
                 if self.ser and self.ser.in_waiting:
-                    byte = self.ser.read(1)[0]
-                    
-                    # Simple State Machine for Protocol: AA [M] [N] [Data...]
-                    if state == "IDLE":
-                        if byte == HEADER_BYTE:
-                            state = "ROWS"
-                            buffer = []
-                    elif state == "ROWS":
-                        rows = byte
-                        state = "COLS"
-                    elif state == "COLS":
-                        cols = byte
-                        state = "DATA"
-                        buffer = []
-                    elif state == "DATA":
-                        # Convert signed byte to int
-                        val = byte if byte < 128 else byte - 256
-                        buffer.append(val)
-                        if len(buffer) >= rows * cols:
-                            # Matrix Complete
-                            self.on_data_received(rows, cols, buffer)
-                            state = "IDLE"
+                    # Read all available bytes
+                    raw_data = self.ser.read(self.ser.in_waiting)
+                    try:
+                        # Try to decode as UTF-8/ASCII
+                        text_data = raw_data.decode('utf-8', errors='replace')
+                        self.on_data_received(text_data)
+                    except:
+                        pass
             except Exception as e:
                 print(f"Serial Read Error: {e}")
                 break
-            time.sleep(0.001)
+            time.sleep(0.01)
 
 # ==============================================================================
 # UI Components
@@ -145,14 +125,9 @@ class MatrixInput(ft.Container):
             for i in range(r):
                 for j in range(c):
                     val = int(self.inputs[i][j].value)
-                    # Clamp to 0-9 for ASCII compatibility or 0-15 for 4-bit
-                    # Based on current Verilog, it takes lower 4 bits.
-                    # We will send ASCII '0'-'9' if value is 0-9.
-                    if 0 <= val <= 9:
-                        data.append(ord('0') + val)
-                    else:
-                        # Fallback for raw values (0-15)
-                        data.append(val & 0x0F)
+                    # Send raw value directly (0-255)
+                    # input_controller will take the lower 4 bits (0-15)
+                    data.append(val & 0xFF)
             
             self.on_send(r, c, data)
         except Exception as ex:
@@ -183,34 +158,14 @@ def main(page: ft.Page):
         disconnect_btn.disabled = not connected
         page.update()
 
-    def on_result_received(rows, cols, data):
-        # Format Matrix
-        matrix_str = ""
-        idx = 0
-        for i in range(rows):
-            row_str = "  ".join([f"{data[idx+j]:4d}" for j in range(cols)])
-            matrix_str += f"[ {row_str} ]\n"
-            idx += cols
+    def on_result_received(text_data):
+        # Append raw text to log
+        log(text_data, "blue")
         
-        log(f"\n--- RESULT RECEIVED ({rows}x{cols}) ---\n{matrix_str}", "blue")
-        
-        # Update Result View
-        result_grid.controls.clear()
-        for i in range(rows):
-            row_controls = []
-            for j in range(cols):
-                val = data[i*cols + j]
-                row_controls.append(
-                    ft.Container(
-                        content=ft.Text(str(val), size=20, weight=ft.FontWeight.BOLD),
-                        alignment=ft.alignment.center,
-                        width=60, height=60,
-                        bgcolor="blue50",
-                        border_radius=5
-                    )
-                )
-            result_grid.controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER))
-        result_grid.update()
+        # Try to parse matrix from text for visualization (Optional/Best Effort)
+        # Expected format: "-123  45\n..."
+        # This is complex to do robustly on partial reads, so we just show text for now.
+
 
     serial_manager = SerialManager(on_result_received, on_serial_status)
 
@@ -237,19 +192,18 @@ def main(page: ft.Page):
             return
         
         # Protocol:
-        # 1. Send Rows (ASCII)
-        # 2. Send Cols (ASCII)
-        # 3. Send Data Bytes
-        # 4. Send CR (\r) to confirm
+        # 1. Send Rows (Raw Byte)
+        # 2. Send Cols (Raw Byte)
+        # 3. Send Data Bytes (Raw Bytes)
+        # 4. Send CR (\r) to confirm (Required by input_controller)
         
-        # Convert dims to ASCII '1'-'5'
-        dim_r = ord('0') + r
-        dim_c = ord('0') + c
-        
-        payload = bytearray([dim_r, dim_c]) + bytearray(data_bytes) + b'\r'
+        # Construct payload with raw bytes
+        # Note: input_controller takes low 4 bits of data, so 0-15 works directly.
+        # matrix_gen takes full 8 bits for M/N/Count.
+        payload = bytearray([r, c]) + bytearray(data_bytes) + b'\r'
         
         serial_manager.send_bytes(payload)
-        log(f"Sent Matrix ({r}x{c}): {len(data_bytes)} bytes", "green")
+        log(f"Sent Matrix ({r}x{c}): {len(data_bytes)} bytes (Raw)", "green")
 
     def send_virtual_confirm(e):
         if serial_manager.send_bytes(b'\r'):

@@ -21,6 +21,7 @@ module tb_matrix_alu;
   wire done;
   wire matrix_t result_matrix;
   wire error_flag;
+  wire [31:0] cycle_cnt; // Bonus
 
   // --- 时钟生成 (100MHz) ---
   initial begin
@@ -39,7 +40,8 @@ module tb_matrix_alu;
     .scalar_val   (scalar_val),
     .done         (done),
     .result_matrix(result_matrix),
-    .error_flag   (error_flag)
+    .error_flag   (error_flag),
+    .cycle_cnt    (cycle_cnt)
   );
 
   // --- 打印任务：Vivado 完美支持直接读取 struct ---
@@ -120,6 +122,35 @@ module tb_matrix_alu;
     print_matrix("Input A", matrix_A);
     print_matrix("Input B", matrix_B);
     print_matrix("RESULT", result_matrix);
+
+    // ------------------------------------------
+    // Case 3: 卷积运算 (Bonus)
+    // ------------------------------------------
+    #20;
+    $display("\n[TEST 3] Convolution (10x12 Image * 3x3 Kernel)");
+    // Matrix A is ignored in CONV mode, but we clear it
+    matrix_A = '0;
+
+    // Setup 3x3 Kernel (Identity-like for easy check)
+    // 1 0 1
+    // 0 1 0
+    // 1 0 1
+    matrix_B.rows = 3; matrix_B.cols = 3; matrix_B.is_valid = 1;
+    matrix_B.cells[0][0] = 1; matrix_B.cells[0][1] = 0; matrix_B.cells[0][2] = 1;
+    matrix_B.cells[1][0] = 0; matrix_B.cells[1][1] = 1; matrix_B.cells[1][2] = 0;
+    matrix_B.cells[2][0] = 1; matrix_B.cells[2][1] = 0; matrix_B.cells[2][2] = 1;
+
+    op_code = OP_CONV;
+    start = 1;
+    @(posedge clk); start = 0;
+    wait(done); #10;
+
+    $display("Kernel:");
+    print_matrix("Kernel (B)", matrix_B);
+    
+    $display("Convolution Result (8x10):");
+    print_matrix("RESULT", result_matrix);
+    $display("Performance: %0d cycles", cycle_cnt);
 
     $display("\n=== Simulation Finished ===");
     $stop;

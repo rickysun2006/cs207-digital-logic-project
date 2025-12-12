@@ -34,8 +34,9 @@ package project_pkg;
   // 矩阵规格
   //-------------------------------------------------------------------------
   // 维度上限
-  localparam int MAX_ROWS = 5;
-  localparam int MAX_COLS = 5;
+  // 为了支持卷积 Bonus (10x12 输入, 8x10 输出), 将物理上限扩大
+  localparam int MAX_ROWS = 12;
+  localparam int MAX_COLS = 12;
 
   // 索引位宽
   localparam int ROW_IDX_W = $clog2(MAX_ROWS + 1);
@@ -140,7 +141,8 @@ package project_pkg;
   localparam code_t CHAR_T = 5'd16;  // t (转置)
   localparam code_t CHAR_J = 5'd17;  // J (卷积)
   localparam code_t CHAR_R = 5'd18;  // r (Err 的 r)
-  localparam code_t CHAR_H = 5'd19;  // -
+  localparam code_t CHAR_H = 5'd19;  // H (Hello)
+  localparam code_t CHAR_P = 5'd20;  // P (OP)
   localparam code_t CHAR_BLK = 5'd31;  // Blank (黑屏)
 
 endpackage

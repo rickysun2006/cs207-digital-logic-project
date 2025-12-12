@@ -120,6 +120,7 @@ module system_core (
   // 5. ALU Signals
   matrix_t alu_result;
   logic alu_err;
+  logic [31:0] alu_cycle_cnt; // Bonus: Cycle Counter
   logic [MAT_ID_W-1:0] alu_op_id_A = 0; // 暂定: ALU操作数选择逻辑待实现
   logic [MAT_ID_W-1:0] alu_op_id_B = 0;
 
@@ -236,7 +237,8 @@ module system_core (
       .scalar_val({4'b0, sw_scalar_val[3:0]}), // 临时取开关低4位
       .done(alu_done),
       .result_matrix(alu_result),
-      .error_flag(alu_err)
+      .error_flag(alu_err),
+      .cycle_cnt(alu_cycle_cnt)
   );
 
   // --- Result Printer (ALU Output) ---
@@ -346,14 +348,16 @@ module system_core (
       .ext_led_mask(8'h00), // 暂未用，接0
       .led_status(led_status)
   );
-
   // --- Seg Controller ---
   seg_controller u_seg_ctrl (
       .current_state(current_state),
+      .op_code(operation_code),
+      .alu_cycle_cnt(alu_cycle_cnt),
       .sw_mode_sel(sw_mode_sel),
       .total_matrix_cnt(total_matrix_cnt),
       .seg_display_data(seg_display_data),
       .blink_mask(blink_mask)
+  );  .blink_mask(blink_mask)
   );
 
   // --- Seven Seg Driver ---

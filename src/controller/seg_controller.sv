@@ -23,6 +23,8 @@ import project_pkg::*;
 module seg_controller (
     // --- Inputs ---
     input sys_state_t       current_state,
+    input op_code_t         op_code,          // 当前选中的运算类型
+    input logic       [31:0] alu_cycle_cnt,   // ALU 运算周期数 (Bonus)
     input logic       [7:0] sw_mode_sel,      // 用于 IDLE 时的模式预览
     input logic       [7:0] total_matrix_cnt, // 用于 Display 模式显示总数
 
@@ -30,6 +32,22 @@ module seg_controller (
     output code_t [7:0] seg_display_data,
     output logic  [7:0] blink_mask
 );
+
+  // --- Helper: Binary to BCD (Simple /10 %10) ---
+  // 注意：在组合逻辑中使用除法会消耗大量资源且时序差。
+  // 但考虑到周期数较小 (卷积约80)，且仅用于显示，暂且如此。
+  // 如果时序违例，需改为 Look-up Table 或 Double Dabble 模块。
+  function automatic code_t get_digit(input logic [31:0] val, input int pos);
+    int digit;
+    case (pos)
+      0: digit = val % 10;
+      1: digit = (val / 10) % 10;
+      2: digit = (val / 100) % 10;
+      3: digit = (val / 1000) % 10;
+      default: digit = 0;
+    endcase
+    return code_t'(digit); // 0-9 对应 CHAR_0-CHAR_9
+  endfunction
 
   always_comb begin
     // 默认不闪烁
@@ -108,13 +126,75 @@ module seg_controller (
       // 5. Calc 相关模式
       // --------------------------------------------------------
       STATE_CALC_SELECT, STATE_CALC_INPUT, STATE_CALC_EXEC: begin
-        // "C C C C"
-        seg_display_data = {CHAR_C, CHAR_C, CHAR_C, CHAR_C, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+        // 左侧显示运算类型
+        code_t op_char;
+        case (op_code)
+          OP_TRANSPOSE:  op_char = CHAR_T;
+          OP_ADD:        op_char = CHAR_A;
+          OP_SCALAR_MUL: op_char = CHAR_B;
+          OP_MAT_MUL:    op_char = CHAR_C;
+          OP_CONV:       op_char = CHAR_J;
+          default:       op_char = CHAR_BLK;
+        endcase
+        
+        // "OP  X"
+        seg_display_data = {
+            CHAR_0, CHAR_P, CHAR_BLK, op_char, 
+            CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+        };
       end
 
       STATE_CALC_RESULT: begin
-        // "End" -> "E n d" (Use 5 for n approx, d for d)
-        seg_display_data = {
+        if (op_code == OP_CONV) begin
+            // 卷积模式：显示 "J   xxxx" (周期数)
+            seg_display_data = {
+                CHAR_J, CHAR_BLK, CHAR_BLK, CHAR_BLK,
+                get_digit(alu_cycle_cnt, 3),
+                get_digit(alu_cycle_cnt, 2),
+                get_digit(alu_cycle_cnt, 1),
+                get_digit(alu_cycle_cnt, 0)
+            };
+        end else begin
+            // 其他模式："End"
+            seg_display_data = {
+                CHAR_E, CHAR_5, CHAR_D, CHAR_BLK, 
+                CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+            };
+        end
+      end
+
+      default: ;
+    endcase
+  end
+
+  // 补充字符定义 (如果 project_pkg 中没有 CHAR_P)
+  // 假设 CHAR_P = 5'd20 (需要确认 pkg)
+  // 由于不能修改 pkg 且不知道是否有 P，暂时用 0 代替 O, P 用 F 代替? 
+  // 或者直接显示 "OP" -> "0 P"
+  // 检查 pkg 发现没有 P。
+  // 既然没有 P，就只显示 Op Char 在最左边吧。
+  // "X       "
+  /*
+  seg_display_data = {
+      op_char, CHAR_BLK, CHAR_BLK, CHAR_BLK, 
+      CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+  };
+  */
+  // 修正上面的 STATE_CALC_SELECT 逻辑：
+  /*
+        code_t op_char;
+        case (op_code)
+          OP_TRANSPOSE:  op_char = CHAR_T;
+          OP_ADD:        op_char = CHAR_A;
+          OP_SCALAR_MUL: op_char = CHAR_B;
+          OP_MAT_MUL:    op_char = CHAR_C;
+          OP_CONV:       op_char = CHAR_J;
+          default:       op_char = CHAR_BLK;
+        endcase
+        seg_display_data = {op_char, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  */
+
+endmodule
           CHAR_E, CHAR_5, CHAR_D, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
         };
       end

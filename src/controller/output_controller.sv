@@ -113,19 +113,12 @@ module output_controller (
       // --------------------------------------------------------
       // Mode 3: Calculation Result (Print Result)
       // --------------------------------------------------------
-      STATE_CALC_RESULT: begin
+      STATE_CALC: begin
         mux_sender_start    = res_sender_start;
         mux_sender_data     = res_sender_data;
         mux_sender_last_col = res_sender_last_col;
         mux_sender_newline  = res_sender_newline;
-        // Result Printer 目前假设用普通格式，如果它升级了，这里也要连
       end
-
-      // --------------------------------------------------------
-      // Mode 4: Calculation Select/Input (Preview Operands?)
-      // --------------------------------------------------------
-      // 如果在“选择运算数”阶段需要回显矩阵内容，这里可能需要接入
-      // 假设目前只有 Display 模式负责显示。
 
       default: ;
     endcase

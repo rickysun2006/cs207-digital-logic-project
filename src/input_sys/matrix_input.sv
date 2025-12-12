@@ -128,7 +128,7 @@ module matrix_input (
 
       NEXT_ELEM: begin
         if (cnt_n == wr_dims_c - 1 && cnt_m == wr_dims_r - 1) begin
-          next_state = DONE;
+          next_state = GET_M;
         end else begin
           // 如果已经在补零模式（包括手动按键或超时触发），则继续补零
           if (is_padding_mode) next_state = PASTE_ZERO;

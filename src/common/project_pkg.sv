@@ -106,11 +106,8 @@ package project_pkg;
     STATE_INPUT,        // 1. 矩阵输入及存储
     STATE_GEN,          // 2. 矩阵生成
     STATE_DISPLAY,      // 3. 矩阵展示
-    STATE_CALC_SELECT,  // 4.1 选择运算类型
-    STATE_CALC_INPUT,   // 4.2 选择运算数 (含倒计时错误处理)
-    STATE_CALC_EXEC,    // 4.3 执行计算
-    STATE_CALC_RESULT,  // 4.4 显示结果
-    STATE_CALC_ERROR    // 4.5 错误处理
+    STATE_CALC,         // 4. 矩阵计算
+    STATE_SETTINGS      // 5. 系统设置（预留）
   } sys_state_t;
 
   //-------------------------------------------------------------------------

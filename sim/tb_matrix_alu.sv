@@ -75,6 +75,16 @@ module tb_matrix_alu;
     $display("\n=== Vivado Simulation Start ===\n");
   endtask
 
+  // --- 启动脉冲任务 (修复时序竞争) ---
+  task trigger_start();
+    @(posedge clk); // 等待时钟沿
+    #1;             // 稍微延迟一点，确保数据稳定 (Hold time)
+    start = 1;
+    @(posedge clk); // 等待下一个时钟沿
+    #1;
+    start = 0;
+  endtask
+
   // --- 主测试流程 ---
   initial begin
     init_sequence();
@@ -92,8 +102,7 @@ module tb_matrix_alu;
     matrix_B.cells[1][0] = 3;  matrix_B.cells[1][1] = 4;
 
     op_code = OP_ADD;
-    start = 1;
-    @(posedge clk); start = 0;
+    trigger_start(); // 使用安全的启动任务
     wait(done); #10;
 
     print_matrix("Input A", matrix_A);
@@ -115,8 +124,7 @@ module tb_matrix_alu;
     matrix_B.cells[2][0] = 2; matrix_B.cells[2][1] = 3;
 
     op_code = OP_MAT_MUL;
-    start = 1;
-    @(posedge clk); start = 0;
+    trigger_start();
     wait(done); #10;
 
     print_matrix("Input A", matrix_A);
@@ -128,10 +136,9 @@ module tb_matrix_alu;
     // ------------------------------------------
     #20;
     $display("\n[TEST 3] Convolution (10x12 Image * 3x3 Kernel)");
-    // Matrix A is ignored in CONV mode, but we clear it
     matrix_A = '0;
 
-    // Setup 3x3 Kernel (Identity-like for easy check)
+    // Setup 3x3 Kernel
     // 1 0 1
     // 0 1 0
     // 1 0 1
@@ -141,8 +148,7 @@ module tb_matrix_alu;
     matrix_B.cells[2][0] = 1; matrix_B.cells[2][1] = 0; matrix_B.cells[2][2] = 1;
 
     op_code = OP_CONV;
-    start = 1;
-    @(posedge clk); start = 0;
+    trigger_start();
     wait(done); #10;
 
     $display("Kernel:");
@@ -153,7 +159,7 @@ module tb_matrix_alu;
     $display("Performance: %0d cycles", cycle_cnt);
 
     $display("\n=== Simulation Finished ===");
-    $stop;
+    $finish; // 显式结束仿真
   end
 
 endmodule

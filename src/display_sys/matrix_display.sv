@@ -56,6 +56,18 @@ module matrix_display (
     output code_t [7:0] seg_data,
     output reg seg_blink
 );
+  // 点亮数码管，指示工作中
+  assign seg_data = {
+    CHAR_C,
+    CHAR_5,
+    CHAR_T,
+    CHAR_BLK,
+    CHAR_BLK,
+    CHAR_BLK,
+    CHAR_BLK,
+    code_t'(total_matrix_cnt[3:0])  // 注意位宽截断
+  };
+  assign seg_blink = 8'b1111_1111;
 
   // --- 状态定义 ---
   typedef enum logic [4:0] {
@@ -115,19 +127,6 @@ module matrix_display (
   // Sender 数据 Mux
   matrix_element_t val_latch;
   assign sender_data = val_latch;
-
-  // 点亮数码管，指示工作中
-  assign seg_data = {
-    CHAR_C,
-    CHAR_5,
-    CHAR_T,
-    CHAR_BLK,
-    CHAR_BLK,
-    CHAR_BLK,
-    CHAR_BLK,
-    code_t'(total_matrix_cnt[3:0])  // 注意位宽截断
-  };
-  assign seg_blink = 8'h00;
 
   // --- 状态机 ---
   always_ff @(posedge clk or negedge rst_n) begin

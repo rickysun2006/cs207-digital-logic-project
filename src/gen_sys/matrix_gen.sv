@@ -56,6 +56,10 @@ module matrix_gen (
     output code_t [7:0] seg_data,
     output reg seg_blink
 );
+  // --- 点亮数码管，指示工作中 ---
+  assign seg_data  = {CHAR_6, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_blink = 8'b1111_1111;
+
   // --- 内部状态定义 ---
   typedef enum logic [3:0] {
     IDLE,
@@ -71,10 +75,6 @@ module matrix_gen (
     DONE
   } state_t;
   state_t state, next_state;
-
-  // --- 点亮数码管，指示工作中 ---
-  assign seg_data  = {CHAR_6, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
-  assign seg_blink = 8'h00;
 
   // --- 寄存器 ---
   reg [7:0] mat_cnt;

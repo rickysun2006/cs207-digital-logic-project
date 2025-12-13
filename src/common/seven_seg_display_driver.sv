@@ -78,31 +78,31 @@ module seven_seg_display_driver (
 
     case (scan_sel)
       2'b00: begin
-        an[0] = blink_mask[0];
-        seg0  = get_seg(display_data[0]);
-        an[4] = blink_mask[4];
-        seg1  = get_seg(display_data[4]);
+        an[0] = blink_mask[7];
+        seg0  = get_seg(display_data[7]);
+        an[4] = blink_mask[3];
+        seg1  = get_seg(display_data[3]);
       end
 
       2'b01: begin
-        an[1] = blink_mask[1];
-        seg0  = get_seg(display_data[1]);
-        an[5] = blink_mask[5];
-        seg1  = get_seg(display_data[5]);
+        an[1] = blink_mask[6];
+        seg0  = get_seg(display_data[6]);
+        an[5] = blink_mask[2];
+        seg1  = get_seg(display_data[2]);
       end
 
       2'b10: begin
-        an[2] = blink_mask[2];
-        seg0  = get_seg(display_data[2]);
-        an[6] = blink_mask[6];
-        seg1  = get_seg(display_data[6]);
+        an[2] = blink_mask[5];
+        seg0  = get_seg(display_data[5]);
+        an[6] = blink_mask[1];
+        seg1  = get_seg(display_data[1]);
       end
 
       2'b11: begin
-        an[3] = blink_mask[3];
-        seg0  = get_seg(display_data[3]);
-        an[7] = blink_mask[7];
-        seg1  = get_seg(display_data[7]);
+        an[3] = blink_mask[4];
+        seg0  = get_seg(display_data[4]);
+        an[7] = blink_mask[0];
+        seg1  = get_seg(display_data[0]);
       end
 
       default: begin

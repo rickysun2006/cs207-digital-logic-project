@@ -34,9 +34,8 @@ package project_pkg;
   // 矩阵规格
   //-------------------------------------------------------------------------
   // 维度上限
-  // 为了支持卷积 Bonus (10x12 输入, 8x10 输出), 将物理上限扩大
-  localparam int MAX_ROWS = 12;
-  localparam int MAX_COLS = 12;
+  localparam int MAX_ROWS = 5;
+  localparam int MAX_COLS = 5;
 
   // 索引位宽
   localparam int ROW_IDX_W = $clog2(MAX_ROWS + 1);

@@ -9,7 +9,7 @@
 #
 # Description    : Centralized LED control.
 #                  - LED[0] : Error Indicator (Red)
-#                  - LED[4:1]: Mode Indicator (Debug info)
+#                  - LED[15:11]: Mode Indicator (Debug info)
 #                  - LED[15:8]: Optional external mask (for raw debugging)
 #
 # Revision History:
@@ -44,11 +44,11 @@ module led_controller (
 
     // --- state display ---
     case (current_state)
-      STATE_INPUT:    led_status[1] = 1'b1;  // LED 1: 输入模式
-      STATE_GEN:      led_status[2] = 1'b1;  // LED 2: 生成模式
-      STATE_DISPLAY:  led_status[3] = 1'b1;  // LED 3: 展示模式
-      STATE_CALC:     led_status[4] = 1'b1;  // 统一为一个状态灯
-      STATE_SETTINGS: led_status[5] = 1'b1;  // 预留
+      STATE_INPUT:    led_status[15] = 1'b1;  // LED 1: 输入模式
+      STATE_GEN:      led_status[14] = 1'b1;  // LED 2: 生成模式
+      STATE_DISPLAY:  led_status[13] = 1'b1;  // LED 3: 展示模式
+      STATE_CALC:     led_status[12] = 1'b1;  // 统一为一个状态灯
+      STATE_SETTINGS: led_status[11] = 1'b1;  // 预留
 
       default: ;  // IDLE 状态不亮模式灯
     endcase

@@ -43,11 +43,9 @@ module matrix_manage_sys (
     // --- 读接口 ---
     input  wire     [MAT_ID_W -1 : 0] rd_id_A,
     output matrix_t                   rd_data_A,
-    output logic                      rd_valid_A,
 
     input  wire     [MAT_ID_W -1 : 0] rd_id_B,
     output matrix_t                   rd_data_B,
-    output logic                      rd_valid_B,
 
     // --- 统计信息输出 ---
     output reg [MAT_ID_W -1 : 0] total_matrix_cnt,
@@ -76,10 +74,16 @@ module matrix_manage_sys (
   assign calc_target = calc_base + calc_ptr;
 
   // --- Read Logic ---
-  assign rd_data_A = storage[rd_id_A];
-  assign rd_valid_A = storage[rd_id_A].is_valid;
-  assign rd_data_B = storage[rd_id_B];
-  assign rd_valid_B = storage[rd_id_B].is_valid;
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      rd_data_A <= '0;
+      rd_data_B <= '0;
+    end else begin
+      // 这里不要加 valid 判断，直接读地址，让综合器更容易识别 BRAM
+      rd_data_A <= storage[rd_id_A];
+      rd_data_B <= storage[rd_id_B];
+    end
+  end
 
   // --- Write Logic ---
   integer i;
@@ -94,8 +98,6 @@ module matrix_manage_sys (
         type_valid_cnt[i] <= 0;
       end
 
-      for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i] <= '0;
-
     end else begin
 
       // --- 清空矩阵 (Global Clear) ---
@@ -105,7 +107,6 @@ module matrix_manage_sys (
           ptr_table[i] <= 0;
           type_valid_cnt[i] <= 0;
         end
-        for (i = 0; i < MAT_TOTAL_SLOTS; i++) storage[i].is_valid <= 1'b0;
       end  // --- 新建矩阵 ---
       else if (wr_cmd_new) begin
         matrix_t new_mat;
@@ -119,7 +120,6 @@ module matrix_manage_sys (
         new_mat = '0;
         new_mat.rows = wr_dims_r;
         new_mat.cols = wr_dims_c;
-        new_mat.is_valid = 1'b1;
         storage[calc_target] <= new_mat;
 
         // Update Counters
@@ -129,9 +129,7 @@ module matrix_manage_sys (
         end
       end  // --- 单点写入 ---
       else if (wr_cmd_single) begin
-        if (storage[latched_wr_id].is_valid) begin
-          storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
-        end
+        storage[latched_wr_id].cells[wr_row_idx][wr_col_idx] <= wr_val_scalar;
       end  // --- 全量写入 (Load All) ---
       else if (wr_cmd_load_all) begin
         storage[wr_target_id] <= wr_val_matrix;

@@ -45,7 +45,11 @@ module matrix_input (
     output matrix_element_t wr_data,
 
     // --- 控制接口 ---
-    output reg input_done
+    output reg input_done,
+
+    // --- 预留数码管输出接口 ---
+    output code_t [7:0] seg_data,
+    output reg seg_blink
 );
 
   // --- 参数定义 ---
@@ -76,6 +80,10 @@ module matrix_input (
 
   // 计时器
   reg [25:0] timer_cnt;
+
+  // --- 点亮数码管，指示工作中 ---
+  assign seg_data  = {CHAR_1, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_blink = 8'h00;
 
   // --- decoder ---
   // TODO: 支持0-9范围以外的输入

@@ -235,10 +235,13 @@ module matrix_uart_sender (
           if (mode_sum_elem) target_width = is_last_col ? WIDTH_CNT : WIDTH_M_N;
           else target_width = NORM_WIDTH;
 
-          // 1. 发送 ID 模式：不补齐，直接结束
+          // 1. 发送 ID 模式并换行
           if (send_id && !mode_sum_head && !mode_sum_elem) begin
-            state <= IDLE;
-            sender_done <= 1;
+            if (is_last_col) state <= SEND_END;
+            else begin
+              state <= IDLE;
+              sender_done <= 1;
+            end
           end  // 2. 补空格循环
           else if (char_count < target_width) begin
             tx_data <= " ";
@@ -254,18 +257,7 @@ module matrix_uart_sender (
             end else if (mode_sum_elem) begin
               if (is_last_col) state <= SUM_END_PIPE;  // 行尾处理
               else begin
-                // 非行尾，发个结束符 '|' 吗？
-                // 根据格式 | m | n |，需要在数字后补 '|'
-                // 但我们只发一个elem。
-                // Display 模块会连续调3次 elem。
-                // 第一次发 m: "| m  " -> 还需要发一个 "|" 吗？
-                // 下一次发 n: "| n  " -> 包含了左边的 pipe。
-                // 所以非行尾不需要发右边的 pipe，除非这是最后一个。
-                // 但为了美观，m 和 n 之间要有分隔线。
-                // 我们的逻辑是 SUM_START_PIPE 发了左边的。
-                // 所以 m 结束时，已经是 "| m  "。
-                // 下一个 n 开始时，会发 "| n  "。
-                // 看起来正好。直接结束。
+                // 非行尾，发个结束符 '|'
                 state <= IDLE;
                 sender_done <= 1;
               end

@@ -55,7 +55,7 @@ module led_controller (
 
     // --- 扩展接口 (LED 15-8) ---
     // 直接映射外部输入的 mask，用于临时调试
-    led_status[15:8] = ext_led_mask;
+    led_status[7:0] = ext_led_mask;
   end
 
 endmodule

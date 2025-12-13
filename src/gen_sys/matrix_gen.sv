@@ -49,7 +49,12 @@ module matrix_gen (
     output matrix_element_t wr_data,
 
     // --- 控制接口 ---
-    output reg gen_done
+    input  wire btn_exit_gen,
+    output reg  gen_done,
+
+    // --- 预留数码管输出接口 ---
+    output code_t [7:0] seg_data,
+    output reg seg_blink
 );
   // --- 内部状态定义 ---
   typedef enum logic [3:0] {
@@ -66,6 +71,10 @@ module matrix_gen (
     DONE
   } state_t;
   state_t state, next_state;
+
+  // --- 点亮数码管，指示工作中 ---
+  assign seg_data  = {CHAR_6, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_blink = 8'h00;
 
   // --- 寄存器 ---
   reg [7:0] mat_cnt;
@@ -86,7 +95,10 @@ module matrix_gen (
     next_state = state;
     case (state)
       IDLE:      if (start_en) next_state = GET_M;
-      GET_M:     if (rx_done) next_state = GET_N;
+      GET_M: begin
+        if (btn_exit_gen) next_state = DONE;
+        else if (rx_done) next_state = GET_N;
+      end
       GET_N:     if (rx_done) next_state = GET_COUNT;
       GET_COUNT: if (rx_done) next_state = GEN_CREATE;
 
@@ -102,8 +114,8 @@ module matrix_gen (
         if (cnt_n == wr_dims_c - 1 && cnt_m == wr_dims_r - 1) begin
           // 已经是本矩阵末尾
           if (cnt_k == mat_cnt - 1) begin
-            // 是最后一个矩阵，结束
-            next_state = DONE;
+            // 是最后一个矩阵，等待下一组输入
+            next_state = GET_M;
           end else begin
             // 还有下一个矩阵，先插入空行
             next_state = GEN_GAP;

@@ -44,15 +44,27 @@ module matrix_input (
     output reg [COL_IDX_W-1:0] wr_col_idx,
     output matrix_element_t wr_data,
 
+    // --- 回显接口 (Echo) ---
+    input  wire     [MAT_ID_W-1:0] last_wr_id,
+    output reg      [MAT_ID_W-1:0] rd_id,
+    input  matrix_t                rd_data,
+
+    output matrix_element_t sender_data,
+    output reg              sender_start,
+    output reg              sender_is_last_col,
+    output reg              sender_newline_only,
+    output reg              sender_id,
+    input  wire             sender_done,
+
     // --- 控制接口 ---
     output reg input_done,
 
     // --- 数码管输出接口 ---
     output code_t [7:0] seg_data,
-    output reg seg_blink
+    output reg    [7:0] seg_blink
 );
   // --- 点亮数码管，指示工作中 ---
-  assign seg_data  = {CHAR_1, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_data  = {CHAR_1, CHAR_N, CHAR_P, CHAR_U, CHAR_T, CHAR_BLK, CHAR_BLK, CHAR_BLK};
   assign seg_blink = 8'b1111_1111;
 
   // --- 参数定义 ---
@@ -61,7 +73,7 @@ module matrix_input (
   localparam int TIMEOUT_CYCLES = 50_000_000;
 
   // --- 状态机定义 ---
-  typedef enum logic [3:0] {
+  typedef enum logic [4:0] {
     IDLE,
     GET_M,
     GET_N,
@@ -70,6 +82,15 @@ module matrix_input (
     WRITE_DATA,
     PASTE_ZERO,
     NEXT_ELEM,
+
+    // --- Echo States ---
+    ECHO_READ_RAM,
+    ECHO_PRINT_ID,
+    ECHO_WAIT_ID,
+    ECHO_PRINT_CELL,
+    ECHO_WAIT_CELL,
+    ECHO_GAP,
+
     ERROR_STATE,
     DONE
   } state_t;
@@ -91,6 +112,10 @@ module matrix_input (
     if (rx_data >= 8'h30 && rx_data <= 8'h39) rx_val_decoded = signed'(rx_data - 8'h30);
     else rx_val_decoded = signed'(rx_data);
   end
+
+  // --- Sender Mux ---
+  matrix_element_t val_latch;
+  assign sender_data = val_latch;
 
   // --- 状态机跳转 ---
   always_ff @(posedge clk or negedge rst_n) begin
@@ -135,13 +160,33 @@ module matrix_input (
 
       NEXT_ELEM: begin
         if (cnt_n == wr_dims_c - 1 && cnt_m == wr_dims_r - 1) begin
-          next_state = GET_M;
+          next_state = ECHO_READ_RAM;  // 完成输入，进入回显
         end else begin
           // 如果已经在补零模式（包括手动按键或超时触发），则继续补零
           if (is_padding_mode) next_state = PASTE_ZERO;
           else next_state = WAIT_DATA;  // 回去等下一个数（并重置计时器）
         end
       end
+
+      // --- Echo Logic ---
+      ECHO_READ_RAM: next_state = ECHO_PRINT_ID;
+
+      ECHO_PRINT_ID: next_state = ECHO_WAIT_ID;
+      ECHO_WAIT_ID:  if (sender_done) next_state = ECHO_PRINT_CELL;
+
+      ECHO_PRINT_CELL: next_state = ECHO_WAIT_CELL;
+      ECHO_WAIT_CELL: begin
+        if (sender_done) begin
+          if (cnt_n == wr_dims_c - 1) begin
+            if (cnt_m == wr_dims_r - 1) next_state = ECHO_GAP;
+            else next_state = ECHO_PRINT_CELL;
+          end else begin
+            next_state = ECHO_PRINT_CELL;
+          end
+        end
+      end
+
+      ECHO_GAP: if (sender_done) next_state = GET_M;  // 回显完成，回到等待输入
 
       ERROR_STATE: if (!start_en) next_state = IDLE;
       DONE:        if (!start_en) next_state = IDLE;
@@ -165,10 +210,24 @@ module matrix_input (
       err <= 0;
       is_padding_mode <= 0;
       timer_cnt <= 0;
+
+      // Sender Reset
+      sender_start <= 0;
+      sender_is_last_col <= 0;
+      sender_newline_only <= 0;
+      sender_id <= 0;
+      rd_id <= 0;
+      val_latch <= 0;
     end else begin
       wr_cmd_new <= 0;
       wr_cmd_single <= 0;
       input_done <= 0;
+
+      // Pulse Reset
+      sender_start <= 0;
+      sender_newline_only <= 0;
+      sender_id <= 0;
+      sender_is_last_col <= 0;
 
       // 计时器控制：只有在 WAIT_DATA 状态下计数，其他状态清零
       if (state == WAIT_DATA) begin
@@ -221,6 +280,53 @@ module matrix_input (
           end else begin
             cnt_n <= cnt_n + 1;
           end
+        end
+
+        // --- Echo Logic ---
+        ECHO_READ_RAM: begin
+          rd_id <= last_wr_id;
+          cnt_m <= 0;
+          cnt_n <= 0;
+        end
+
+        ECHO_PRINT_ID: begin
+          val_latch <= signed'({1'b0, rd_id});
+          sender_start <= 1;
+          sender_id <= 1;
+          sender_is_last_col <= 1;
+        end
+
+        ECHO_WAIT_ID: begin
+          sender_id <= 1;
+          sender_is_last_col <= 1;
+        end
+
+        ECHO_PRINT_CELL: begin
+          val_latch <= rd_data.cells[cnt_m][cnt_n];
+          sender_start <= 1;
+          if (cnt_n == wr_dims_c - 1) sender_is_last_col <= 1;
+        end
+
+        ECHO_WAIT_CELL: begin
+          if (cnt_n == wr_dims_c - 1) sender_is_last_col <= 1;
+
+          if (sender_done) begin
+            if (cnt_n == wr_dims_c - 1) begin
+              cnt_n <= 0;
+              if (cnt_m != wr_dims_r - 1) cnt_m <= cnt_m + 1;
+            end else begin
+              cnt_n <= cnt_n + 1;
+            end
+          end
+        end
+
+        ECHO_GAP: begin
+          sender_start <= 1;
+          sender_newline_only <= 1;
+          // Reset for next input
+          cnt_m <= 0;
+          cnt_n <= 0;
+          is_padding_mode <= 0;
         end
 
         DONE: input_done <= 1'b1;

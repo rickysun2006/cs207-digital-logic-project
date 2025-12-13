@@ -54,10 +54,10 @@ module matrix_gen (
 
     // --- 预留数码管输出接口 ---
     output code_t [7:0] seg_data,
-    output reg seg_blink
+    output reg    [7:0] seg_blink
 );
   // --- 点亮数码管，指示工作中 ---
-  assign seg_data  = {CHAR_6, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_data  = {CHAR_6, CHAR_E, CHAR_N, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
   assign seg_blink = 8'b1111_1111;
 
   // --- 内部状态定义 ---
@@ -94,14 +94,19 @@ module matrix_gen (
   always_comb begin
     next_state = state;
     case (state)
-      IDLE:      if (start_en) next_state = GET_M;
+      IDLE:       if (start_en) next_state = GET_M;
       GET_M: begin
         if (btn_exit_gen) next_state = DONE;
         else if (rx_done) next_state = GET_N;
       end
-      GET_N:     if (rx_done) next_state = GET_COUNT;
-      GET_COUNT: if (rx_done) next_state = GEN_CREATE;
-
+      GET_N: begin
+        if (rx_done) next_state = GET_COUNT;
+        if (btn_exit_gen) next_state = GET_M;
+      end
+      GET_COUNT: begin
+        if (rx_done) next_state = GEN_CREATE;
+        if (btn_exit_gen) next_state = GET_N;
+      end
       GEN_CREATE: next_state = GEN_WRITE;
 
       GEN_WRITE: next_state = TX_WAIT_SENDER;

@@ -66,23 +66,8 @@ module fpga_top (
       .clk_in1  (clk)           // 物理输入时钟
   );
   */
-  // Simple Clock Divider to reduce frequency (100MHz -> 25MHz)
-  // This helps with timing closure and reduces synthesis effort
-  reg [1:0] clk_div;
-  always @(posedge clk or negedge rst_n) begin
-      if (!rst_n) begin
-          clk_div <= 2'b0;
-      end else begin
-          clk_div <= clk_div + 1;
-      end
-  end
-
-  // Use BUFG to drive the clock tree (recommended for derived clocks)
-  BUFG u_bufg_clk (
-      .I(clk_div[1]),
-      .O(sys_clk)
-  );
-
+  // 临时直连
+  assign sys_clk = clk;
   assign sys_clk_locked = 1'b1;
 
   assign sys_rst_n = rst_n & sys_clk_locked;

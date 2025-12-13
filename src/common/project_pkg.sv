@@ -139,6 +139,10 @@ package project_pkg;
   localparam code_t CHAR_R = 5'd18;  // r (Err 的 r)
   localparam code_t CHAR_H = 5'd19;  // H (Hello)
   localparam code_t CHAR_P = 5'd20;  // P (OP)
+  localparam code_t CHAR_L = 5'd21;  // L
+  localparam code_t CHAR_U = 5'd22;  // U
+  localparam code_t CHAR_S = 5'd23;  // S
+  localparam code_t CHAR_N = 5'd24;  // n
   localparam code_t CHAR_BLK = 5'd31;  // Blank (黑屏)
 
 endpackage

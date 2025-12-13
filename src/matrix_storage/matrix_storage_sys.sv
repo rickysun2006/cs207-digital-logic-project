@@ -49,11 +49,12 @@ module matrix_manage_sys (
 
     // --- 统计信息输出 ---
     output reg [MAT_ID_W -1 : 0] total_matrix_cnt,
-    output reg [          3 : 0] type_valid_cnt  [0:MAT_SIZE_CNT-1]
+    output logic [MAT_ID_W -1 : 0] last_wr_id,  // 新增：输出最后写入的 ID
+    output reg [3 : 0] type_valid_cnt[0:MAT_SIZE_CNT-1]
 );
 
   // Internal Storage
-  matrix_t storage[0:MAT_TOTAL_SLOTS-1];
+  (* ram_style = "block" *) matrix_t storage[0:MAT_TOTAL_SLOTS-1];
 
   // Pointers & Limits
   logic [PTR_W-1:0] active_limit = DEFAULT_LIMIT;
@@ -61,6 +62,7 @@ module matrix_manage_sys (
 
   // 书签寄存器
   logic [MAT_ID_W-1:0] latched_wr_id;
+  assign last_wr_id = latched_wr_id;
 
   // 寻址逻辑
   logic [4:0] calc_t_idx;

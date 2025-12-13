@@ -87,6 +87,7 @@ module system_core (
 
   // Metadata (Storage -> Display)
   logic [7:0] total_matrix_cnt;  // 修改位宽定义以匹配模块 [7:0]
+  logic [MAT_ID_W-1:0] ms_last_wr_id;  // Storage -> Input
   logic [3:0] type_valid_cnt[0:MAT_SIZE_CNT-1];
 
   // --- Functional Module Signals ---
@@ -96,10 +97,15 @@ module system_core (
   logic inp_wr_new, inp_wr_single;
   logic [ROW_IDX_W-1:0] inp_wr_dim_r, inp_wr_row;
   logic [COL_IDX_W-1:0] inp_wr_dim_c, inp_wr_col;
-  matrix_element_t       inp_wr_data;
+  matrix_element_t inp_wr_data;
+  // Input Sender (Echo)
+  logic            inp_snd_start;
+  matrix_element_t inp_snd_data;
+  logic inp_snd_last, inp_snd_nl, inp_snd_id;
+  logic  [MAT_ID_W-1:0] inp_rd_id;
   // Seg (Not used in controller yet, place holder)
-  code_t           [7:0] inp_seg_d;
-  logic            [7:0] inp_seg_b;
+  code_t [         7:0] inp_seg_d;
+  logic  [         7:0] inp_seg_b;
 
   // 2. Matrix Gen
   logic gen_wr_new, gen_wr_single;
@@ -227,6 +233,16 @@ module system_core (
       .wr_row_idx(inp_wr_row),
       .wr_col_idx(inp_wr_col),
       .wr_data(inp_wr_data),
+      // Echo Interface
+      .last_wr_id(ms_last_wr_id),
+      .rd_id(inp_rd_id),
+      .rd_data(ms_rd_data_A),
+      .sender_data(inp_snd_data),
+      .sender_start(inp_snd_start),
+      .sender_is_last_col(inp_snd_last),
+      .sender_newline_only(inp_snd_nl),
+      .sender_id(inp_snd_id),
+      .sender_done(sender_done),
       // Seg
       .seg_data(inp_seg_d),
       .seg_blink(inp_seg_b),
@@ -395,6 +411,14 @@ module system_core (
   output_controller u_output_ctrl (
       .current_state(current_state),
 
+      // Source: Input (Echo)
+      .inp_sender_start(inp_snd_start),
+      .inp_sender_data(inp_snd_data),
+      .inp_sender_last_col(inp_snd_last),
+      .inp_sender_newline(inp_snd_nl),
+      .inp_sender_id(inp_snd_id),
+      .inp_rd_id(inp_rd_id),
+
       // Source: Gen
       .gen_sender_start(gen_snd_start),
       .gen_sender_data(gen_snd_data),
@@ -455,7 +479,8 @@ module system_core (
       .rd_data_B(ms_rd_data_B),
 
       .total_matrix_cnt(total_matrix_cnt),
-      .type_valid_cnt  (type_valid_cnt)
+      .last_wr_id(ms_last_wr_id),
+      .type_valid_cnt(type_valid_cnt)
   );
 
   // --- UART Sender ---

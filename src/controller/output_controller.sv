@@ -56,6 +56,14 @@ module output_controller (
     // 暂时保留 ALU 的 Read ID 输入（通常 ALU 计算时自己控制读地址）
     input wire [MAT_ID_W-1:0] alu_rd_id_A,
 
+    // --- Source 5: From Matrix Input (Echo) ---
+    input wire                            inp_sender_start,
+    input matrix_element_t                inp_sender_data,
+    input wire                            inp_sender_last_col,
+    input wire                            inp_sender_newline,
+    input wire                            inp_sender_id,
+    input wire             [MAT_ID_W-1:0] inp_rd_id,
+
     // --- Destination 1: To UART Sender ---
     output reg              mux_sender_start,
     output matrix_element_t mux_sender_data,
@@ -83,6 +91,18 @@ module output_controller (
     mux_rd_id_A         = alu_rd_id_A;
 
     case (current_state)
+      // --------------------------------------------------------
+      // Mode 0: Matrix Input (Echo)
+      // --------------------------------------------------------
+      STATE_INPUT: begin
+        mux_sender_start    = inp_sender_start;
+        mux_sender_data     = inp_sender_data;
+        mux_sender_last_col = inp_sender_last_col;
+        mux_sender_newline  = inp_sender_newline;
+        mux_sender_id       = inp_sender_id;
+        mux_rd_id_A         = inp_rd_id;
+      end
+
       // --------------------------------------------------------
       // Mode 1: Matrix Generation (Echo Random Numbers)
       // --------------------------------------------------------

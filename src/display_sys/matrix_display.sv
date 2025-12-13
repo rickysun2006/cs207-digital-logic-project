@@ -54,24 +54,25 @@ module matrix_display (
 
     // --- 预留数码管输出接口 ---
     output code_t [7:0] seg_data,
-    output reg seg_blink
+    output reg    [7:0] seg_blink
 );
   // 点亮数码管，指示工作中
   assign seg_data = {
-    CHAR_C,
+    CHAR_1,
     CHAR_5,
-    CHAR_T,
+    CHAR_P,
+    CHAR_L,
+    CHAR_A,
     CHAR_BLK,
-    CHAR_BLK,
-    CHAR_BLK,
-    CHAR_BLK,
-    code_t'(total_matrix_cnt[3:0])  // 注意位宽截断
+    code_t'((total_matrix_cnt / 10) % 10),
+    code_t'(total_matrix_cnt % 10)
   };
   assign seg_blink = 8'b1111_1111;
 
   // --- 状态定义 ---
   typedef enum logic [4:0] {
     IDLE,
+    EXIT_WAIT, // 等待 start_en 拉低
 
     // --- Summary 阶段 ---
     SUM_HEAD,           // 打印总数+表头
@@ -155,6 +156,8 @@ module matrix_display (
       case (state)
         IDLE: if (start_en) state <= SUM_HEAD;
 
+        EXIT_WAIT: if (!start_en) state <= IDLE;
+
         // ======================================================
         // 1. 自动统计 (Summary Table)
         // ======================================================
@@ -203,7 +206,10 @@ module matrix_display (
           sender_is_last_col <= 1;  // 触发 Sender 打印行尾分割线
           state <= SUM_WAIT_ROW_CNT;
         end
-        SUM_WAIT_ROW_CNT: if (sender_done) state <= SUM_NEXT_IDX;
+        SUM_WAIT_ROW_CNT: begin
+          sender_is_last_col <= 1;
+          if (sender_done) state <= SUM_NEXT_IDX;
+        end
 
         SUM_NEXT_IDX: begin
           if (scan_idx == MAT_SIZE_CNT - 1) state <= SUM_END_GAP;
@@ -225,7 +231,7 @@ module matrix_display (
         WAIT_INPUT_M: begin
           if (btn_quit) begin
             display_done <= 1;  // 退出 Display 模式
-            state <= IDLE;
+            state <= EXIT_WAIT;
           end else if (rx_done) begin
             cmd_m_ascii <= rx_data;
             state <= WAIT_INPUT_N;
@@ -283,7 +289,11 @@ module matrix_display (
           sender_is_last_col <= 1;  // 后面跟换行
           state <= DET_WAIT_ID;
         end
-        DET_WAIT_ID: if (sender_done) state <= DET_PRINT_CELL;
+        DET_WAIT_ID: begin
+          sender_id <= 1;
+          sender_is_last_col <= 1;
+          if (sender_done) state <= DET_PRINT_CELL;
+        end
 
         // 2. 打印矩阵元素
         DET_PRINT_CELL: begin
@@ -297,13 +307,19 @@ module matrix_display (
         end
 
         DET_WAIT_CELL: begin
+          // 保持信号，防止被 Pulse 复位逻辑清零
+          if (cur_c == rd_data.cols - 1) sender_is_last_col <= 1;
+
           if (sender_done) begin
             // 游标更新
             if (cur_c == rd_data.cols - 1) begin
               cur_c <= 0;
-              if (cur_r == rd_data.rows - 1) state <= DET_GAP;  // 矩阵结束
-              else cur_r <= cur_r + 1;
-              state <= DET_PRINT_CELL;  // 下一行
+              if (cur_r == rd_data.rows - 1) begin
+                state <= DET_GAP;  // 矩阵结束
+              end else begin
+                cur_r <= cur_r + 1;
+                state <= DET_PRINT_CELL;  // 下一行
+              end
             end else begin
               cur_c <= cur_c + 1;
               state <= DET_PRINT_CELL;  // 下一列

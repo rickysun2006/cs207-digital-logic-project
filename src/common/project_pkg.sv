@@ -49,7 +49,7 @@ package project_pkg;
   // 矩阵存储配置
   //-------------------------------------------------------------------------
   // 物理存储上限
-  localparam int PHYSICAL_MAX_PER_DIM = 8;
+  localparam int PHYSICAL_MAX_PER_DIM = 2; // Reduced from 8 to 2 to save resources
   localparam int PTR_W = 3;
 
   // 总矩阵存储槽位数

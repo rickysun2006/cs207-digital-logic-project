@@ -215,6 +215,73 @@ class MatrixInput(ft.Column):
             if self.page:
                 self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Input Error: {str(ex)}"), bgcolor="red"))
 
+class MatrixOutput(ft.Column):
+    def __init__(self):
+        super().__init__()
+        self.spacing = 20
+        self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        
+        self.rows_val = ft.Text("-", size=20, weight=ft.FontWeight.BOLD)
+        self.cols_val = ft.Text("-", size=20, weight=ft.FontWeight.BOLD)
+        
+        self.grid_container = ft.Column(spacing=8, alignment=ft.MainAxisAlignment.CENTER)
+        
+        self.controls = [
+            ft.Container(
+                content=ft.Row([
+                    ft.Text("Received Dimensions:", color=ft.Colors.OUTLINE),
+                    self.rows_val,
+                    ft.Text("×", size=18, color=ft.Colors.OUTLINE),
+                    self.cols_val
+                ], alignment=ft.MainAxisAlignment.CENTER),
+                padding=ft.padding.only(bottom=10)
+            ),
+            ft.Container(
+                content=self.grid_container,
+                padding=20,
+                bgcolor="#0DFFFFFF",
+                border_radius=10,
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                alignment=ft.alignment.center
+            )
+        ]
+        self.update_matrix(0, 0, [])
+
+    def update_matrix(self, r, c, data):
+        self.rows_val.value = str(r)
+        self.cols_val.value = str(c)
+        
+        if r == 0 or c == 0:
+            self.grid_container.controls = [ft.Text("Waiting for result...", color=ft.Colors.OUTLINE)]
+        else:
+            grid_controls = []
+            idx = 0
+            for i in range(r):
+                row_controls = []
+                for j in range(c):
+                    val = data[idx] if idx < len(data) else 0
+                    idx += 1
+                    
+                    # Color coding
+                    bg_color = ft.Colors.SURFACE_VARIANT
+                    if val > 0: bg_color = ft.Colors.INDIGO_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.INDIGO_100
+                    if val < 0: bg_color = ft.Colors.RED_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.RED_100
+                    
+                    tf = ft.Container(
+                        content=ft.Text(str(val), text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
+                        width=50, height=40,
+                        alignment=ft.alignment.center,
+                        border_radius=4,
+                        bgcolor=bg_color,
+                        border=ft.border.all(1, ft.Colors.OUTLINE)
+                    )
+                    row_controls.append(tf)
+                grid_controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER))
+            self.grid_container.controls = grid_controls
+            
+        if self.page:
+            self.update()
+
 # ==============================================================================
 # Main Application
 # ==============================================================================
@@ -290,6 +357,42 @@ def main(page: ft.Page):
         )
         page.update()
 
+    # --- Parser Logic ---
+    rx_buffer = ""
+    
+    def process_rx_data(new_data):
+        nonlocal rx_buffer
+        rx_buffer += new_data
+        if len(rx_buffer) > 20000: rx_buffer = rx_buffer[-10000:] # Prevent overflow
+        
+        # Tokenize
+        tokens = rx_buffer.replace('|', ' ').split()
+        nums = []
+        for t in tokens:
+            try:
+                nums.append(int(t))
+            except:
+                pass
+        
+        # Search for header 170 (0xAA)
+        found_idx = -1
+        for i in range(len(nums) - 2):
+            if nums[i] == 170:
+                r = nums[i+1]
+                c = nums[i+2]
+                # Basic validation
+                if r > 0 and c > 0 and r <= 8 and c <= 8:
+                    # Check if we have enough data
+                    if len(nums) >= i + 3 + r*c:
+                        found_idx = i
+        
+        if found_idx != -1:
+            i = found_idx
+            r = nums[i+1]
+            c = nums[i+2]
+            data = nums[i+3 : i+3+r*c]
+            matrix_output.update_matrix(r, c, data)
+
     # --- Serial Callbacks ---
     def on_serial_status(connected, msg):
         status_indicator.bgcolor = "green" if connected else "red"
@@ -308,6 +411,7 @@ def main(page: ft.Page):
 
     def on_result_received(text_data):
         log(text_data.strip(), "rx")
+        process_rx_data(text_data)
 
     serial_manager = SerialManager(on_result_received, on_serial_status)
 
@@ -395,8 +499,20 @@ def main(page: ft.Page):
         icon_color=ft.Colors.PRIMARY
     )
 
+    # --- Main Content (Right) ---
+    
+    matrix_section = StyledCard(
+        title="Matrix Input", icon=ft.Icons.APPS,
+        content=MatrixInput(send_matrix_payload)
+    )
+
+    result_section = StyledCard(
+        title="Matrix Output", icon=ft.Icons.APPS,
+        content=MatrixOutput()
+    )
+
     sidebar = ft.Container(
-        width=300,
+        width=450,
         content=ft.Column([
             # 1. Header (带主题切换)
             ft.Container(
@@ -433,17 +549,13 @@ def main(page: ft.Page):
                     ft.Text("Use this to manually trigger processing if auto-trigger fails.", size=10, color=ft.Colors.OUTLINE)
                 ])
             ),
+
+            # 4. Matrix Input
+            matrix_section,
             
             ft.Container(expand=True),
             ft.Text("Designed with Flet", size=10, color=ft.Colors.OUTLINE, text_align=ft.TextAlign.CENTER)
-        ])
-    )
-
-    # --- Main Content (Right) ---
-    
-    matrix_section = StyledCard(
-        title="Matrix Input", icon=ft.Icons.APPS,
-        content=MatrixInput(send_matrix_payload)
+        ], scroll=ft.ScrollMode.AUTO)
     )
 
     # Terminal/Log Area
@@ -461,7 +573,6 @@ def main(page: ft.Page):
     
     terminal_body = ft.Container(
         content=log_view,
-        # 终端背景也动态化，或者保持深色（这里选择动态化以适应浅色模式）
         bgcolor=ft.Colors.SURFACE,
         expand=True,
         border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
@@ -469,23 +580,41 @@ def main(page: ft.Page):
         border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
     )
 
-    content_area = ft.Column([
-        matrix_section,
-        ft.Container(height=10),
-        ft.Container(
-            expand=True,
-            content=ft.Column([
-                terminal_header,
-                terminal_body
-            ], spacing=0)
-        )
-    ], expand=True)
+    # --- Tabs Layout ---
+    tabs = ft.Tabs(
+        selected_index=0,
+        animation_duration=300,
+        tabs=[
+            ft.Tab(
+                text="Dashboard",
+                icon=ft.Icons.DASHBOARD,
+                content=ft.Container(
+                    content=ft.Column([
+                        result_section,
+                    ], scroll=ft.ScrollMode.AUTO, spacing=10),
+                    padding=20
+                )
+            ),
+            ft.Tab(
+                text="System Logs",
+                icon=ft.Icons.TERMINAL,
+                content=ft.Container(
+                    content=ft.Column([
+                        terminal_header,
+                        terminal_body
+                    ], spacing=0, expand=True),
+                    padding=20
+                )
+            ),
+        ],
+        expand=True,
+    )
 
     page.add(
         ft.Row([
             sidebar,
             ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
-            content_area
+            tabs
         ], expand=True)
     )
 

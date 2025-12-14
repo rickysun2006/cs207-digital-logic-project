@@ -302,7 +302,7 @@ def main(page: ft.Page):
         
         # 连接状态改变时，禁用/启用输入
         port_dropdown.disabled = connected
-        baud_dropdown.disabled = connected
+        baud_input.disabled = connected
         
         page.update()
 
@@ -316,7 +316,7 @@ def main(page: ft.Page):
         if not port_dropdown.value:
             log("No port selected", "error")
             return
-        serial_manager.connect(port_dropdown.value, int(baud_dropdown.value))
+        serial_manager.connect(port_dropdown.value, int(baud_input.value))
 
     def disconnect_click(e):
         serial_manager.disconnect()
@@ -361,19 +361,19 @@ def main(page: ft.Page):
         text_size=14, 
         content_padding=10,
         border_color="transparent", 
-        bgcolor="#33000000",
+        bgcolor="surfaceVariant",
         filled=True, 
         expand=True
     )    # 修复 BUG: 移除了 height 参数
-    baud_dropdown = ft.Dropdown(
+    baud_input = ft.TextField(
         label="Baud", value=str(DEFAULT_BAUDRATE), 
         text_size=14, 
         content_padding=10,
-        options=[ft.dropdown.Option("9600"), ft.dropdown.Option("115200")],
         border_color="transparent", 
-        bgcolor="#33000000",
+        bgcolor="surfaceVariant",
         filled=True, 
-        width=100
+        width=100,
+        keyboard_type=ft.KeyboardType.NUMBER
     )
 
     connect_btn = ft.ElevatedButton(
@@ -418,7 +418,7 @@ def main(page: ft.Page):
                 content=ft.Column([
                     ft.Row([status_indicator, status_text, ft.Container(expand=True), status_detail]),
                     ft.Row([port_dropdown, ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ports, icon_color=ft.Colors.PRIMARY)]),
-                    baud_dropdown,
+                    baud_input,
                     ft.Container(height=5),
                     connect_btn,
                     disconnect_btn

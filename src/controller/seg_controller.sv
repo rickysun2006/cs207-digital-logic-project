@@ -34,9 +34,8 @@ module seg_controller (
     input code_t [7:0] disp_seg_data,
     input        [7:0] disp_seg_blink,
 
-    // Calc 模块稍后实现，预留接口
-    // input code_t [7:0] calc_seg_data,
-    // input [7:0]        calc_seg_blink,
+    input code_t [7:0] calc_seg_data,
+    input [7:0]        calc_seg_blink,
 
     // --- Output to Driver ---
     output code_t [7:0] seg_data_out,
@@ -79,8 +78,8 @@ module seg_controller (
       end
 
       STATE_CALC: begin
-        // 暂未实现，输出 C C C C
-        seg_data_out = {CHAR_C, CHAR_C, CHAR_C, CHAR_C, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+        seg_data_out  = calc_seg_data;
+        seg_blink_out = calc_seg_blink;
       end
 
       default: ;

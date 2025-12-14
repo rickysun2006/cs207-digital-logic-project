@@ -33,7 +33,6 @@ module system_core (
 
     // --- User I/O ---
     input wire [7:0] sw_mode_sel,     // 模式选择 / 运算类型选择
-    input wire [7:0] sw_scalar_val,   // 标量输入 / 辅助参数
     input wire       btn_confirm,     // 确认
     input wire       btn_reset_logic, // 逻辑复位 / 返回 / 结束输入(Esc)
 
@@ -137,6 +136,9 @@ module system_core (
   logic [MAT_ID_W-1:0] sys_calc_id_A, sys_calc_id_B;
   logic                   sys_calc_err;
   logic                   sys_calc_print_start;
+  // Seg
+  code_t           [ 7:0] calc_seg_d;
+  logic            [ 7:0] calc_seg_b;
 
   // 5. Matrix ALU
   logic                   alu_calc_done;
@@ -316,6 +318,7 @@ module system_core (
       .rst_n(rst_n),
       .start_en(current_state == STATE_CALC),
       .sw_mode_sel(sw_mode_sel),
+      .scalar_val_in(sw_mode_sel),
       .btn_confirm(btn_confirm),
       .btn_esc(btn_reset_logic),
       .rx_data(rx_byte),
@@ -334,7 +337,11 @@ module system_core (
       .printer_done (res_printer_done),
 
       .calc_sys_done(calc_sys_done),
-      .calc_err(sys_calc_err)
+      .calc_err(sys_calc_err),
+
+      // Seg Display
+      .seg_data (calc_seg_d),
+      .seg_blink(calc_seg_b)
   );
 
   // --- Matrix ALU ---
@@ -346,7 +353,7 @@ module system_core (
       // Data inputs from Storage based on IDs from Calc Sys
       .matrix_A(ms_rd_data_A),
       .matrix_B(ms_rd_data_B),
-      .scalar_val({4'b0, sw_scalar_val[3:0]}),  // Scalar from switches
+      .scalar_val({4'b0, sw_mode_sel[3:0]}),  // Scalar from switches
 
       .done(alu_calc_done),
       .result_matrix(alu_result_matrix),
@@ -525,6 +532,8 @@ module system_core (
       .gen_seg_blink (gen_seg_b),
       .disp_seg_data (disp_seg_d),
       .disp_seg_blink(disp_seg_b),
+      .calc_seg_data (calc_seg_d),
+      .calc_seg_blink(calc_seg_b),
 
       .seg_data_out (seg_display_data),
       .seg_blink_out(blink_mask)

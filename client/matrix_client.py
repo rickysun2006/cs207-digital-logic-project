@@ -170,7 +170,11 @@ class MatrixInput(ft.Column):
         try:
             r = int(self.rows_field.value)
             c = int(self.cols_field.value)
-            if r > 8 or c > 8: return
+            # FPGA MAX_ROWS/COLS is 5. Limit UI to 5 to prevent Error State.
+            if r > 5 or c > 5: 
+                if self.page:
+                    self.page.show_snack_bar(ft.SnackBar(content=ft.Text("Max dimensions are 5x5"), bgcolor="red"))
+                return
         except:
             return
 
@@ -263,7 +267,7 @@ class MatrixOutput(ft.Column):
                     idx += 1
                     
                     # Color coding
-                    bg_color = ft.Colors.SURFACE_VARIANT
+                    bg_color = "surfaceVariant"
                     if val > 0: bg_color = ft.Colors.INDIGO_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.INDIGO_100
                     if val < 0: bg_color = ft.Colors.RED_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.RED_100
                     
@@ -359,39 +363,71 @@ def main(page: ft.Page):
 
     # --- Parser Logic ---
     rx_buffer = ""
+    rx_numbers = []
     
     def process_rx_data(new_data):
-        nonlocal rx_buffer
+        nonlocal rx_buffer, rx_numbers
         rx_buffer += new_data
         if len(rx_buffer) > 20000: rx_buffer = rx_buffer[-10000:] # Prevent overflow
         
+        # Find the last separator index to ensure we only process complete tokens
+        last_sep_index = -1
+        for i in range(len(rx_buffer) - 1, -1, -1):
+            if rx_buffer[i] in ' \n\r|':
+                last_sep_index = i
+                break
+        
+        if last_sep_index == -1:
+            return # No complete tokens yet
+            
+        # Extract complete part
+        complete_part = rx_buffer[:last_sep_index]
+        rx_buffer = rx_buffer[last_sep_index+1:] # Keep remainder
+        
         # Tokenize
-        tokens = rx_buffer.replace('|', ' ').split()
-        nums = []
+        tokens = complete_part.replace('|', ' ').split()
         for t in tokens:
             try:
-                nums.append(int(t))
+                rx_numbers.append(int(t))
             except:
                 pass
         
-        # Search for header 170 (0xAA)
-        found_idx = -1
-        for i in range(len(nums) - 2):
-            if nums[i] == 170:
-                r = nums[i+1]
-                c = nums[i+2]
-                # Basic validation
-                if r > 0 and c > 0 and r <= 8 and c <= 8:
-                    # Check if we have enough data
-                    if len(nums) >= i + 3 + r*c:
-                        found_idx = i
-        
-        if found_idx != -1:
-            i = found_idx
-            r = nums[i+1]
-            c = nums[i+2]
-            data = nums[i+3 : i+3+r*c]
+        # Process rx_numbers state machine
+        while True:
+            # Search for header 170 (0xAA)
+            try:
+                idx = rx_numbers.index(170)
+            except ValueError:
+                # No header found yet. 
+                # If buffer is too large, discard old garbage, but be careful not to discard a partial packet.
+                if len(rx_numbers) > 1000: 
+                    rx_numbers.clear()
+                break
+            
+            # Found 170 at idx. Check if we have dimensions.
+            if len(rx_numbers) < idx + 3:
+                break # Wait for R and C
+            
+            r = rx_numbers[idx+1]
+            c = rx_numbers[idx+2]
+            
+            # Basic validation (Max dimensions 5x5)
+            if r <= 0 or c <= 0 or r > 5 or c > 5:
+                # Invalid header/dimensions, discard this 170 and retry
+                del rx_numbers[:idx+1]
+                continue
+
+            # Check if we have enough data
+            expected_len = 3 + r*c
+            if len(rx_numbers) < idx + expected_len:
+                break # Wait for data
+            
+            # Extract data
+            data = rx_numbers[idx+3 : idx+expected_len]
             matrix_output.update_matrix(r, c, data)
+            
+            # Remove processed packet
+            del rx_numbers[:idx+expected_len]
 
     # --- Serial Callbacks ---
     def on_serial_status(connected, msg):
@@ -436,7 +472,10 @@ def main(page: ft.Page):
         if not serial_manager.is_connected:
             page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
-        payload = bytearray([r, c]) + bytearray(data_bytes) + b'\r'
+        # FPGA expects pure binary data: [r, c, d1, d2, ...]
+        # Do NOT send \r or \n at the end, otherwise it will be interpreted as the start of a new matrix (rows=13)
+        # and cause the FPGA to enter ERROR_STATE because 13 > MAX_ROWS.
+        payload = bytearray([r, c]) + bytearray(data_bytes)
         serial_manager.send_bytes(payload)
         log(f"Matrix {r}x{c} sent ({len(data_bytes)} bytes)", "tx")
 

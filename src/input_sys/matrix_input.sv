@@ -106,11 +106,10 @@ module matrix_input (
   reg [25:0] timer_cnt;
 
   // --- decoder ---
-  // TODO: 支持0-9范围以外的输入
+  // Modified: Removed ASCII decoding to support full 8-bit binary range from Client
   matrix_element_t rx_val_decoded;
   always_comb begin
-    if (rx_data >= 8'h30 && rx_data <= 8'h39) rx_val_decoded = signed'(rx_data - 8'h30);
-    else rx_val_decoded = signed'(rx_data);
+    rx_val_decoded = signed'(rx_data);
   end
 
   // --- Sender Mux ---

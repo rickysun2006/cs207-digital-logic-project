@@ -188,13 +188,13 @@ module system_core (
       .rst_n(rst_n),
       .sw_mode_sel(sw_mode_sel),
       .btn_confirm(btn_confirm),
-      .btn_reset(btn_reset_logic),
+      //.btn_reset(btn_reset_logic), // Removed in v1.1
       .input_done(input_done),
       .gen_done(gen_done),
       .display_done(display_done),
       .calc_done(calc_sys_done),
-      .current_state(current_state),
-      .safe_reset_btn(fsm_safe_reset_btn)
+      .current_state(current_state)
+      //.safe_reset_btn(fsm_safe_reset_btn) // Removed
   );
 
   //==========================================================================
@@ -204,13 +204,13 @@ module system_core (
   // --- UART RX ---
   uart_rx #(
       .CLK_FREQ(SYS_CLK_FREQ),
-      .BAUD_RATE(BAUD_RATE)
+      .UART_BPS(BAUD_RATE)
   ) u_uart_rx (
       .clk(clk),
       .rst_n(rst_n),
-      .rx(uart_rx),
-      .rx_data(rx_byte),
-      .rx_done(rx_valid)
+      .uart_rxd(uart_rx),
+      .uart_rx_data(rx_byte),
+      .uart_rx_done(rx_valid)
   );
 
   // --- Matrix Input ---

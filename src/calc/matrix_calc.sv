@@ -36,6 +36,7 @@ module matrix_calc_sys (
     input wire [COL_IDX_W-1:0] mat_a_cols,
     input wire [ROW_IDX_W-1:0] mat_b_rows,
     input wire [COL_IDX_W-1:0] mat_b_cols,
+    input wire                 mat_b_valid,
 
     // --- Configuration ---
     input wire [3:0] cfg_err_countdown,
@@ -92,6 +93,10 @@ module matrix_calc_sys (
     SEL_WAIT_DET,  // Wait for Detail Done
     SEL_WAIT_ID,   // Wait for User Input ID
 
+    // Auto Select
+    AUTO_SEARCH_B,
+    AUTO_WAIT_B,
+
     // New States for Confirmation
     PRINT_A,
     WAIT_PRINT_A,
@@ -120,6 +125,7 @@ module matrix_calc_sys (
   op_code_t op_reg;
   reg [MAT_ID_W-1:0] id_a_reg;
   reg [MAT_ID_W-1:0] id_b_reg;
+  reg [MAT_ID_W-1:0] search_id;
   reg [31:0] err_timer;  // Enough for 5s
   reg [3:0] err_countdown_val;  // For 10s countdown
 
@@ -135,15 +141,12 @@ module matrix_calc_sys (
 
   // Valid if data is within reasonable range (e.g. < 32 for IDs/Dims)
   // This is a loose check, logic will handle specific range checks
-  wire rx_valid_char = (rx_data < 8'd32);
-
+  wire rx_valid_char = (rx_data < MAT_TOTAL_SLOTS);
 
   // Button Edge Detect
   logic btn_confirm_prev, btn_esc_prev;
   wire btn_pos_confirm = btn_confirm & ~btn_confirm_prev;
   wire btn_pos_esc = btn_esc & ~btn_esc_prev;
-
-
 
   // Output Assignments
   assign alu_op_code = op_reg;
@@ -341,6 +344,10 @@ module matrix_calc_sys (
               target_op <= 0;
               state <= SEL_SHOW_SUM;
             end else state <= SELECT_OP;
+          end else if (btn_pos_confirm && target_op == 1 && scalar_val_in == 0) begin
+            // Auto Select B
+            search_id <= 0;
+            state <= AUTO_SEARCH_B;
           end else if (rx_done && rx_valid_char) begin
             // Store ID
             if (target_op == 0) begin
@@ -370,6 +377,32 @@ module matrix_calc_sys (
               seg_content[0] <= code_t'(rx_decoded_val % 10);
 
               state <= PRINT_A;
+            end
+          end
+        end
+
+        // Auto Search Logic
+        AUTO_SEARCH_B: begin
+          id_b_reg <= search_id;
+          state <= AUTO_WAIT_B;
+        end
+
+        AUTO_WAIT_B: begin
+          // Wait for memory read (1 cycle passed since AUTO_SEARCH_B)
+          // Check validity
+          if (mat_b_valid && check_validity()) begin
+            // Found valid B
+            // Update Display B
+            seg_content[1] <= code_t'((search_id / 10) % 10);
+            seg_content[0] <= code_t'(search_id % 10);
+            state <= PRINT_A;
+          end else begin
+            // Invalid, try next
+            if (search_id >= MAT_TOTAL_SLOTS - 1) begin
+              state <= SEL_WAIT_ID;  // Give up
+            end else begin
+              search_id <= search_id + 1;
+              state <= AUTO_SEARCH_B;
             end
           end
         end

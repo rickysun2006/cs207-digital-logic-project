@@ -393,10 +393,11 @@ module system_core (
       .rx_done(rx_valid),
 
       // Matrix Dimensions for Validation
-      .mat_a_rows(ms_rd_data_A.rows),
-      .mat_a_cols(ms_rd_data_A.cols),
-      .mat_b_rows(ms_rd_data_B.rows),
-      .mat_b_cols(ms_rd_data_B.cols),
+      .mat_a_rows (ms_rd_data_A.rows),
+      .mat_a_cols (ms_rd_data_A.cols),
+      .mat_b_rows (ms_rd_data_B.rows),
+      .mat_b_cols (ms_rd_data_B.cols),
+      .mat_b_valid(ms_rd_data_B.is_valid),
 
       .cfg_err_countdown(cfg_err_countdown),
 

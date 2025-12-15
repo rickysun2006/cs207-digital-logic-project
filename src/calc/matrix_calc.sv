@@ -171,14 +171,25 @@ module matrix_calc_sys (
       case (state)
         IDLE: begin
           if (start_en) begin
-            // Wait for button release before accepting new input
-            if (!btn_confirm) state <= SELECT_OP;
+            // Wait for button release STABLY before accepting new input
+            // Fix: Add debounce for release to prevent false triggering on bounce
+            if (btn_confirm) begin
+              err_timer <= 0;  // Reset timer if button is pressed (or bouncing high)
+            end else begin
+              if (err_timer < 10000) begin  // Wait ~100us (100MHz * 10000 = 100us)
+                err_timer <= err_timer + 1;
+              end else begin
+                state <= SELECT_OP;
+                err_timer <= 0;
+              end
+            end
+          end else begin
+            err_timer <= 0;
           end
           seg_content <= {
             CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
           };
           calc_err <= 0;
-          err_timer <= 0;
           disp_req_en <= 0;
         end
 

@@ -34,8 +34,8 @@ package project_pkg;
   // 矩阵规格
   //-------------------------------------------------------------------------
   // 维度上限
-  localparam int MAX_ROWS = 10;
-  localparam int MAX_COLS = 12;
+  localparam int MAX_ROWS = 8;
+  localparam int MAX_COLS = 10;
 
   // 索引位宽
   localparam int ROW_IDX_W = $clog2(MAX_ROWS + 1);

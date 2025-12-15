@@ -55,6 +55,7 @@ module matrix_input (
     output reg              sender_newline_only,
     output reg              sender_id,
     input  wire             sender_done,
+    input  wire             sender_ready,
 
     // --- 控制接口 ---
     output reg input_done,
@@ -289,10 +290,12 @@ module matrix_input (
         end
 
         ECHO_PRINT_ID: begin
-          val_latch <= signed'({1'b0, rd_id});
-          sender_start <= 1;
-          sender_id <= 1;
-          sender_is_last_col <= 1;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, rd_id});
+            sender_start <= 1;
+            sender_id <= 1;
+            sender_is_last_col <= 1;
+          end
         end
 
         ECHO_WAIT_ID: begin
@@ -301,9 +304,11 @@ module matrix_input (
         end
 
         ECHO_PRINT_CELL: begin
-          val_latch <= rd_data.cells[cnt_m][cnt_n];
-          sender_start <= 1;
-          if (cnt_n == wr_dims_c - 1) sender_is_last_col <= 1;
+          if (sender_ready) begin
+            val_latch <= rd_data.cells[cnt_m][cnt_n];
+            sender_start <= 1;
+            if (cnt_n == wr_dims_c - 1) sender_is_last_col <= 1;
+          end
         end
 
         ECHO_WAIT_CELL: begin
@@ -320,12 +325,14 @@ module matrix_input (
         end
 
         ECHO_GAP: begin
-          sender_start <= 1;
-          sender_newline_only <= 1;
-          // Reset for next input
-          cnt_m <= 0;
-          cnt_n <= 0;
-          is_padding_mode <= 0;
+          if (sender_ready) begin
+            sender_start <= 1;
+            sender_newline_only <= 1;
+            // Reset for next input
+            cnt_m <= 0;
+            cnt_n <= 0;
+            is_padding_mode <= 0;
+          end
         end
 
         DONE: input_done <= 1'b1;

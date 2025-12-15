@@ -38,12 +38,12 @@ module system_core (
     input wire       btn_reset_logic, // 逻辑复位 / 返回 / 结束输入(Esc)
 
     // --- Logical Outputs ---
-    output wire [15:0] led_status,  // 16�? LED 状�?�指�?
+    output wire [15:0] led_status,  // 16�? LED 状�?�指�?
 
     // --- Display Driver Interface ---
-    output wire [7:0] seg_an,      // 数码管位�?
-    output wire [7:0] seg_data_0,  // 数码管段�? Group 0 (Right)
-    output wire [7:0] seg_data_1   // 数码管段�? Group 1 (Left)
+    output wire [7:0] seg_an,      // 数码管位�?
+    output wire [7:0] seg_data_0,  // 数码管段�? Group 0 (Right)
+    output wire [7:0] seg_data_1   // 数码管段�? Group 1 (Left)
 );
 
   //==========================================================================
@@ -61,7 +61,7 @@ module system_core (
   logic             input_done;
   logic             gen_done;
   logic             display_done;
-  logic             calc_sys_done;  // 计算子系统整体完�?
+  logic             calc_sys_done;  // 计算子系统整体完�?
 
   // --- UART Signals ---
   logic       [7:0] rx_byte;
@@ -86,7 +86,7 @@ module system_core (
   matrix_t ms_rd_data_B;
 
   // Metadata (Storage -> Display)
-  logic [7:0] total_matrix_cnt;  // 修改位宽定义以匹配模�? [7:0]
+  logic [7:0] total_matrix_cnt;  // 修改位宽定义以匹配模�? [7:0]
   logic [MAT_ID_W-1:0] ms_last_wr_id;  // Storage -> Input
   logic [3:0] type_valid_cnt[0:MAT_SIZE_CNT-1];
 
@@ -147,12 +147,30 @@ module system_core (
   matrix_t                alu_result_matrix;
   logic                   alu_err_flag;
   logic            [31:0] alu_cycle_cnt;  // Bonus 性能计数
+  // ALU Stream
+  logic                   alu_stream_valid;
+  matrix_element_t        alu_stream_data;
+  logic                   alu_stream_last;
+  logic                   alu_stream_ready;
 
   // 6. Matrix Result Printer
   logic                   res_printer_done;
+  // Printer Outputs (Renamed)
+  logic                   res_snd_start_printer;
+  matrix_element_t        res_snd_data_printer;
+  logic                   res_snd_last_printer;
+  logic                   res_snd_nl_printer;
+
+  // Combined Result Sender (ALU Stream OR Printer)
   logic                   res_snd_start;
   matrix_element_t        res_snd_data;
-  logic res_snd_last, res_snd_nl;
+  logic                   res_snd_last;
+  logic                   res_snd_nl;
+
+  assign res_snd_start = (sys_calc_op == OP_CONV) ? alu_stream_valid : res_snd_start_printer;
+  assign res_snd_data  = (sys_calc_op == OP_CONV) ? alu_stream_data : res_snd_data_printer;
+  assign res_snd_last  = (sys_calc_op == OP_CONV) ? alu_stream_last : res_snd_last_printer;
+  assign res_snd_nl    = (sys_calc_op == OP_CONV) ? 1'b0 : res_snd_nl_printer;
 
   // --- MUX Outputs (To Sender) ---
   logic            mux_tx_start;
@@ -162,11 +180,15 @@ module system_core (
   logic mux_tx_head, mux_tx_elem;
 
   // --- Random Number ---
-  logic  [7:0] rand_val;
+  logic [7:0] rand_val;
 
   // --- Status Display ---
   code_t [7:0] seg_display_data;
-  logic  [7:0] blink_mask;
+  logic [7:0] blink_mask;
+
+  // --- UART Sender ---
+  logic uart_sender_ready;
+  assign alu_stream_ready   = uart_sender_ready && (current_state == STATE_CALC);
 
 
   //==========================================================================
@@ -247,6 +269,7 @@ module system_core (
       .sender_newline_only(inp_snd_nl),
       .sender_id(inp_snd_id),
       .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
       // Seg
       .seg_data(inp_seg_d),
       .seg_blink(inp_seg_b),
@@ -267,6 +290,7 @@ module system_core (
       .sender_is_last_col(gen_snd_last),
       .sender_newline_only(gen_snd_nl),
       .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
       // Writer
       .wr_cmd_new(gen_wr_new),
       .wr_cmd_single(gen_wr_single),
@@ -317,6 +341,7 @@ module system_core (
       .sender_sum_head(disp_snd_head),
       .sender_sum_elem(disp_snd_elem),
       .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
       // Seg
       .seg_data(disp_seg_d),
       .seg_blink(disp_seg_b),
@@ -379,7 +404,13 @@ module system_core (
       .done(alu_calc_done),
       .result_matrix(alu_result_matrix),
       .error_flag(alu_err_flag),
-      .cycle_cnt(alu_cycle_cnt)
+      .cycle_cnt(alu_cycle_cnt),
+
+      // Streaming Interface
+      .stream_valid(alu_stream_valid),
+      .stream_data(alu_stream_data),
+      .stream_last_col(alu_stream_last),
+      .stream_ready(alu_stream_ready)
   );
 
   // --- Result Printer ---
@@ -389,11 +420,12 @@ module system_core (
       .start(sys_calc_print_start),
       .result_matrix(alu_result_matrix),
       // Sender Interface
-      .sender_data(res_snd_data),
-      .sender_start(res_snd_start),
-      .sender_is_last_col(res_snd_last),
-      .sender_newline_only(res_snd_nl),
+      .sender_data(res_snd_data_printer),
+      .sender_start(res_snd_start_printer),
+      .sender_is_last_col(res_snd_last_printer),
+      .sender_newline_only(res_snd_nl_printer),
       .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
 
       .printer_done(res_printer_done)
   );
@@ -511,7 +543,6 @@ module system_core (
       .type_valid_cnt(type_valid_cnt)
   );
 
-  // --- UART Sender ---
   matrix_uart_sender u_uart_sender (
       .clk(clk),
       .rst_n(rst_n),
@@ -526,7 +557,8 @@ module system_core (
 
       .tx_data (tx_byte),
       .tx_start(tx_start),
-      .tx_busy (tx_busy)
+      .tx_busy (tx_busy),
+      .ready   (uart_sender_ready)
   );
 
   //==========================================================================

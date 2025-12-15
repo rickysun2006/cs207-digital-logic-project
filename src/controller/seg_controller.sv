@@ -35,12 +35,18 @@ module seg_controller (
     input        [7:0] disp_seg_blink,
 
     input code_t [7:0] calc_seg_data,
-    input [7:0]        calc_seg_blink,
+    input        [7:0] calc_seg_blink,
 
     // --- Output to Driver ---
     output code_t [7:0] seg_data_out,
     output reg    [7:0] seg_blink_out
 );
+
+  // 辅助 task: 生成 "X X X X" 格式
+  // Removed task to avoid scope issues in always_comb
+  // task seg_display_idle(input code_t ch);
+  //   seg_data_out = {ch, ch, ch, ch, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  // endtask
 
   always_comb begin
     // 默认值
@@ -52,10 +58,22 @@ module seg_controller (
       // 1. IDLE: 系统级预览逻辑 (保持在此处)
       // ------------------------------------------------
       STATE_IDLE: begin
-        if (sw_mode_sel[7]) seg_display_idle(CHAR_C);  // Calc
-        else if (sw_mode_sel[6]) seg_display_idle(CHAR_D);  // Disp
-        else if (sw_mode_sel[5]) seg_display_idle(CHAR_6);  // Gen
-        else if (sw_mode_sel[4]) seg_display_idle(CHAR_1);  // Input
+        if (sw_mode_sel[7])
+          seg_data_out = {
+            CHAR_C, CHAR_C, CHAR_C, CHAR_C, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+          };  // Calc
+        else if (sw_mode_sel[6])
+          seg_data_out = {
+            CHAR_D, CHAR_D, CHAR_D, CHAR_D, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+          };  // Disp
+        else if (sw_mode_sel[5])
+          seg_data_out = {
+            CHAR_6, CHAR_6, CHAR_6, CHAR_6, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+          };  // Gen
+        else if (sw_mode_sel[4])
+          seg_data_out = {
+            CHAR_1, CHAR_1, CHAR_1, CHAR_1, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+          };  // Input
         else seg_data_out = {CHAR_H, CHAR_E, CHAR_1, CHAR_1, CHAR_0, CHAR_BLK, CHAR_BLK, CHAR_BLK};
       end
 
@@ -85,10 +103,5 @@ module seg_controller (
       default: ;
     endcase
   end
-
-  // 辅助 task: 生成 "X X X X" 格式
-  task seg_display_idle(input code_t ch);
-    seg_data_out = {ch, ch, ch, ch, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
-  endtask
 
 endmodule

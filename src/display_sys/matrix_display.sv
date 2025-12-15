@@ -55,6 +55,7 @@ module matrix_display (
     output reg              sender_sum_head,      // 输出表头模式
     output reg              sender_sum_elem,      // 输出表格行模式
     input  wire             sender_done,
+    input  wire             sender_ready,
 
     // --- 状态指示 ---
     output reg display_done,  // 退出 Display 模式信号
@@ -183,11 +184,13 @@ module matrix_display (
         // 1. 自动统计 (Summary Table)
         // ======================================================
         SUM_HEAD: begin
-          val_latch <= signed'({1'b0, total_matrix_cnt});  // 传入总数
-          sender_start <= 1;
-          sender_sum_head <= 1;  // 触发表头打印逻辑
-          state <= SUM_WAIT_HEAD;
-          scan_idx <= 0;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, total_matrix_cnt});  // 传入总数
+            sender_start <= 1;
+            sender_sum_head <= 1;  // 触发表头打印逻辑
+            state <= SUM_WAIT_HEAD;
+            scan_idx <= 0;
+          end
         end
         SUM_WAIT_HEAD: if (sender_done) state <= SUM_CHECK_IDX;
 
@@ -201,31 +204,37 @@ module matrix_display (
 
         // 1. 发送 M
         SUM_PRINT_ROW_M: begin
-          val_latch <= signed'({1'b0, scan_m});
-          sender_start <= 1;
-          sender_sum_elem <= 1;
-          sender_is_last_col <= 0;  // 不是行尾
-          state <= SUM_WAIT_ROW_M;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, scan_m});
+            sender_start <= 1;
+            sender_sum_elem <= 1;
+            sender_is_last_col <= 0;  // 不是行尾
+            state <= SUM_WAIT_ROW_M;
+          end
         end
         SUM_WAIT_ROW_M: if (sender_done) state <= SUM_PRINT_ROW_N;
 
         // 2. 发送 N
         SUM_PRINT_ROW_N: begin
-          val_latch <= signed'({1'b0, scan_n});
-          sender_start <= 1;
-          sender_sum_elem <= 1;
-          sender_is_last_col <= 0;
-          state <= SUM_WAIT_ROW_N;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, scan_n});
+            sender_start <= 1;
+            sender_sum_elem <= 1;
+            sender_is_last_col <= 0;
+            state <= SUM_WAIT_ROW_N;
+          end
         end
         SUM_WAIT_ROW_N: if (sender_done) state <= SUM_PRINT_ROW_CNT;
 
         // 3. 发送 Count (行尾)
         SUM_PRINT_ROW_CNT: begin
-          val_latch <= signed'({1'b0, type_valid_cnt[scan_idx]});
-          sender_start <= 1;
-          sender_sum_elem <= 1;
-          sender_is_last_col <= 1;  // 触发 Sender 打印行尾分割线
-          state <= SUM_WAIT_ROW_CNT;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, type_valid_cnt[scan_idx]});
+            sender_start <= 1;
+            sender_sum_elem <= 1;
+            sender_is_last_col <= 1;  // 触发 Sender 打印行尾分割线
+            state <= SUM_WAIT_ROW_CNT;
+          end
         end
         SUM_WAIT_ROW_CNT: begin
           sender_is_last_col <= 1;
@@ -241,13 +250,15 @@ module matrix_display (
         end
 
         SUM_END_GAP: begin
-          sender_start <= 1;
-          sender_newline_only <= 1;  // 表格后空一行
-          if (ext_en) begin
-            ext_done <= 1;
-            state <= IDLE;
-          end else begin
-            state <= WAIT_INPUT_M;
+          if (sender_ready) begin
+            sender_start <= 1;
+            sender_newline_only <= 1;  // 表格后空一行
+            if (ext_en) begin
+              ext_done <= 1;
+              state <= IDLE;
+            end else begin
+              state <= WAIT_INPUT_M;
+            end
           end
         end
 
@@ -315,11 +326,13 @@ module matrix_display (
 
         // 1. 打印 ID
         DET_PRINT_ID: begin
-          val_latch <= signed'({1'b0, rd_id});
-          sender_start <= 1;
-          sender_id <= 1;  // 告诉 Sender 这是一个 ID，不用补齐
-          sender_is_last_col <= 1;  // 后面跟换行
-          state <= DET_WAIT_ID;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, rd_id});
+            sender_start <= 1;
+            sender_id <= 1;  // 告诉 Sender 这是一个 ID，不用补齐
+            sender_is_last_col <= 1;  // 后面跟换行
+            state <= DET_WAIT_ID;
+          end
         end
         DET_WAIT_ID: begin
           sender_id <= 1;
@@ -329,13 +342,15 @@ module matrix_display (
 
         // 2. 打印矩阵元素
         DET_PRINT_CELL: begin
-          val_latch <= rd_data.cells[cur_r][cur_c];
-          sender_start <= 1;
+          if (sender_ready) begin
+            val_latch <= rd_data.cells[cur_r][cur_c];
+            sender_start <= 1;
 
-          if (cur_c == rd_data.cols - 1) sender_is_last_col <= 1;
-          else sender_is_last_col <= 0;
+            if (cur_c == rd_data.cols - 1) sender_is_last_col <= 1;
+            else sender_is_last_col <= 0;
 
-          state <= DET_WAIT_CELL;
+            state <= DET_WAIT_CELL;
+          end
         end
 
         DET_WAIT_CELL: begin
@@ -361,9 +376,11 @@ module matrix_display (
 
         // 3. 矩阵间隔
         DET_GAP: begin
-          sender_start <= 1;
-          sender_newline_only <= 1;
-          state <= DET_NEXT_MAT;
+          if (sender_ready) begin
+            sender_start <= 1;
+            sender_newline_only <= 1;
+            state <= DET_NEXT_MAT;
+          end
         end
 
         DET_NEXT_MAT: begin

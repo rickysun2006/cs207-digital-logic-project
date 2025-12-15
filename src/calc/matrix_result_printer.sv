@@ -18,6 +18,7 @@ module matrix_result_printer (
     output reg              sender_is_last_col,
     output reg              sender_newline_only,
     input  wire             sender_done,
+    input  wire             sender_ready,
 
     // --- Control Interface ---
     output reg printer_done
@@ -67,26 +68,32 @@ module matrix_result_printer (
         // 1. Send Header (0xAA = 170, simplified as a number)
         // Note: Our sender sends ASCII string of the number.
         SEND_HEAD: begin
-          val_latch <= 8'd170;  // 0xAA
-          sender_start <= 1;
-          state <= WAIT_HEAD;
+          if (sender_ready) begin
+            val_latch <= 8'd170;  // 0xAA
+            sender_start <= 1;
+            state <= WAIT_HEAD;
+          end
         end
         WAIT_HEAD: if (sender_done) state <= SEND_ROWS;
 
         // 2. Send Rows
         SEND_ROWS: begin
-          val_latch <= signed'({1'b0, result_matrix.rows});
-          sender_start <= 1;
-          state <= WAIT_ROWS;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, result_matrix.rows});
+            sender_start <= 1;
+            state <= WAIT_ROWS;
+          end
         end
         WAIT_ROWS: if (sender_done) state <= SEND_COLS;
 
         // 3. Send Cols
         SEND_COLS: begin
-          val_latch <= signed'({1'b0, result_matrix.cols});
-          sender_start <= 1;
-          sender_is_last_col <= 1;  // Newline after dimensions
-          state <= WAIT_COLS;
+          if (sender_ready) begin
+            val_latch <= signed'({1'b0, result_matrix.cols});
+            sender_start <= 1;
+            sender_is_last_col <= 1;  // Newline after dimensions
+            state <= WAIT_COLS;
+          end
         end
         WAIT_COLS: begin
           if (sender_done) begin
@@ -98,13 +105,15 @@ module matrix_result_printer (
 
         // 4. Send Matrix Data Loop
         SEND_DATA: begin
-          val_latch <= result_matrix.cells[r][c];
-          sender_start <= 1;
+          if (sender_ready) begin
+            val_latch <= result_matrix.cells[r][c];
+            sender_start <= 1;
 
-          if (c == result_matrix.cols - 1) sender_is_last_col <= 1;
-          else sender_is_last_col <= 0;
+            if (c == result_matrix.cols - 1) sender_is_last_col <= 1;
+            else sender_is_last_col <= 0;
 
-          state <= WAIT_DATA;
+            state <= WAIT_DATA;
+          end
         end
 
         WAIT_DATA: begin

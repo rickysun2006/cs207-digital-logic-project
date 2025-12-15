@@ -40,8 +40,11 @@ module matrix_uart_sender (
     // --- UART 物理接口 ---
     output logic [7:0] tx_data,
     output logic       tx_start,
-    input  logic       tx_busy
+    input  logic       tx_busy,
+    output logic       ready
 );
+
+  assign ready = (state == IDLE);
 
   // 表格参数
   // Border: +----+----+------+ (18 chars)
@@ -78,6 +81,7 @@ module matrix_uart_sender (
   logic [7:0] abs_val;
   logic [3:0] bcd_2, bcd_1, bcd_0;
   logic [4:0] char_count;
+  matrix_element_t data_latched;
 
   // 模式寄存器 (锁存当前请求类型)
   logic mode_sum_head, mode_sum_elem;
@@ -122,8 +126,8 @@ module matrix_uart_sender (
 
   // --- 数值预处理 ---
   always_comb begin
-    is_negative = (data_in < 0);
-    abs_val     = is_negative ? (~data_in + 1) : data_in;
+    is_negative = (data_latched < 0);
+    abs_val     = is_negative ? (~data_latched + 1) : data_latched;
     bcd_2       = abs_val / 100;
     bcd_1       = (abs_val % 100) / 10;
     bcd_0       = abs_val % 10;
@@ -151,7 +155,8 @@ module matrix_uart_sender (
           char_count <= 0;
 
           if (start || send_summary_head || send_summary_elem || send_newline) begin
-            // 锁存模式
+            // 锁存数据与模式
+            data_latched  <= data_in;
             mode_sum_head <= send_summary_head;
             mode_sum_elem <= send_summary_elem;
             mode_last_col <= is_last_col;

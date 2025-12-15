@@ -38,6 +38,7 @@ module matrix_gen (
     output reg              sender_is_last_col,
     output reg              sender_newline_only,
     input  wire             sender_done,
+    input  wire             sender_ready,
 
     // --- 写入存储接口 ---
     output reg wr_cmd_new,
@@ -109,7 +110,10 @@ module matrix_gen (
       end
       GEN_CREATE: next_state = GEN_WRITE;
 
-      GEN_WRITE: next_state = TX_WAIT_SENDER;
+      GEN_WRITE: begin
+        if (sender_ready) next_state = TX_WAIT_SENDER;
+        else next_state = GEN_WRITE;
+      end
 
       TX_WAIT_SENDER: begin
         if (sender_done) next_state = NEXT_ELEM;
@@ -131,7 +135,10 @@ module matrix_gen (
         end
       end
 
-      GEN_GAP: next_state = TX_WAIT_GAP;
+      GEN_GAP: begin
+        if (sender_ready) next_state = TX_WAIT_GAP;
+        else next_state = GEN_GAP;
+      end
       TX_WAIT_GAP:
       if (sender_done) next_state = GEN_CREATE;  // 换行发完，创建下一个矩阵
 
@@ -191,20 +198,24 @@ module matrix_gen (
 
         // --- 生成与存储与启动发送 ---
         GEN_WRITE: begin
-          val_latch           <= signed'(rand_val);
-          wr_cmd_single       <= 1'b1;
-          wr_row_idx          <= cnt_m[ROW_IDX_W-1:0];
-          wr_col_idx          <= cnt_n[COL_IDX_W-1:0];
-          wr_data             <= signed'(rand_val);
+          if (sender_ready) begin
+            val_latch           <= signed'(rand_val);
+            wr_cmd_single       <= 1'b1;
+            wr_row_idx          <= cnt_m[ROW_IDX_W-1:0];
+            wr_col_idx          <= cnt_n[COL_IDX_W-1:0];
+            wr_data             <= signed'(rand_val);
 
-          sender_start        <= 1'b1;
-          sender_newline_only <= 0;  // 正常发送数据
+            sender_start        <= 1'b1;
+            sender_newline_only <= 0;  // 正常发送数据
+          end
         end
 
         // --- 发送空行 ---
         GEN_GAP: begin
-          sender_start        <= 1'b1;
-          sender_newline_only <= 1'b1;  // 仅发送换行
+          if (sender_ready) begin
+            sender_start        <= 1'b1;
+            sender_newline_only <= 1'b1;  // 仅发送换行
+          end
         end
 
         // --- 循环控制 ---

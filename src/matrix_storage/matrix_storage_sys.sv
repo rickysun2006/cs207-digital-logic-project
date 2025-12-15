@@ -49,7 +49,7 @@ module matrix_manage_sys (
 
     // --- 统计信息输出 ---
     output reg [MAT_ID_W -1 : 0] total_matrix_cnt,
-    output logic [MAT_ID_W -1 : 0] last_wr_id,  // 新增：输出最后写入的 ID
+    output logic [MAT_ID_W -1 : 0] last_wr_id,
     output reg [3 : 0] type_valid_cnt[0:MAT_SIZE_CNT-1]
 );
 
@@ -81,7 +81,6 @@ module matrix_manage_sys (
       rd_data_A <= '0;
       rd_data_B <= '0;
     end else begin
-      // 这里不要加 valid 判断，直接读地址，让综合器更容易识别 BRAM
       rd_data_A <= storage[rd_id_A];
       rd_data_B <= storage[rd_id_B];
     end

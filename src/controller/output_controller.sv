@@ -45,9 +45,11 @@ module output_controller (
     input matrix_element_t res_sender_data,
     input wire             res_sender_last_col,
     input wire             res_sender_newline,
-    // input wire               res_sender_id,
-    // input wire               res_sender_sum_head,
-    // input wire               res_sender_sum_elem, 
+
+    // --- Source 3.5: From ALU Stream (Convolution) ---
+    input wire             alu_stream_valid,
+    input matrix_element_t alu_stream_data,
+    input wire             alu_stream_last_col,
 
     // --- Source 4: From Input Controller (ALU Operand Selection) ---
     // ALU 计算前选择操作数时，可能也需要读取 Port A 来显示？
@@ -135,7 +137,7 @@ module output_controller (
       // Mode 3: Calculation Result (Print Result)
       // --------------------------------------------------------
       STATE_CALC: begin
-        // Priority: Display (Slave Mode) > Result Printer
+        // Priority: Display (Slave Mode) > ALU Stream (Conv) > Result Printer
         // Fix: Use disp_active to switch read ID even when not sending (e.g. reading RAM)
         if (disp_active) begin
           mux_sender_start    = disp_sender_start;
@@ -146,6 +148,14 @@ module output_controller (
           mux_sender_sum_head = disp_sender_sum_head;
           mux_sender_sum_elem = disp_sender_sum_elem;
           mux_rd_id_A         = disp_rd_id;
+        end else if (alu_stream_valid) begin
+          // Convolution Stream Output
+          mux_sender_start    = 1'b1;
+          mux_sender_data     = alu_stream_data;
+          mux_sender_last_col = alu_stream_last_col;
+          // Stream doesn't have explicit newline signal, usually handled by last_col logic in sender
+          // or we can infer it if needed. For now, map to 0.
+          mux_sender_newline  = 0;
         end else begin
           mux_sender_start    = res_sender_start;
           mux_sender_data     = res_sender_data;

@@ -62,19 +62,12 @@ module matrix_result_printer (
 
       case (state)
         IDLE: begin
-          if (start) state <= SEND_HEAD;
+          if (start) state <= SEND_ROWS;
         end
 
-        // 1. Send Header (0xAA = 170, simplified as a number)
-        // Note: Our sender sends ASCII string of the number.
-        SEND_HEAD: begin
-          if (sender_ready) begin
-            val_latch <= 8'd170;  // 0xAA
-            sender_start <= 1;
-            state <= WAIT_HEAD;
-          end
-        end
-        WAIT_HEAD: if (sender_done) state <= SEND_ROWS;
+        // 1. Send Header (REMOVED)
+        // SEND_HEAD: begin ... end
+        // WAIT_HEAD: ...
 
         // 2. Send Rows
         SEND_ROWS: begin

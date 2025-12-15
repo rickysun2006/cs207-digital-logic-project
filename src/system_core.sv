@@ -379,6 +379,7 @@ module system_core (
       .alu_scalar_out(sys_calc_scalar_val),
       .alu_done(alu_calc_done),
       .alu_err(alu_err_flag),
+      .alu_cycle_cnt(alu_cycle_cnt),
 
       // Control Printer
       .printer_start(sys_calc_print_start),
@@ -503,6 +504,11 @@ module system_core (
       .res_sender_data(res_snd_data),
       .res_sender_last_col(res_snd_last),
       .res_sender_newline(res_snd_nl),
+
+      // Source: ALU Stream (Conv)
+      .alu_stream_valid(alu_stream_valid),
+      .alu_stream_data(alu_stream_data),
+      .alu_stream_last_col(alu_stream_last),
 
       // Source: Calc Sys (Operand Select)
       .alu_rd_id_A(sys_calc_id_A),

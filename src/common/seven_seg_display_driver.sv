@@ -68,6 +68,7 @@ module seven_seg_display_driver (
       CHAR_U: get_seg = 8'h3E;  // U
       CHAR_S: get_seg = 8'h6D;  // S
       CHAR_N: get_seg = 8'h54;  // n
+      CHAR_Y: get_seg = 8'h66;  // y
       CHAR_DASH: get_seg = 8'h40;  // -
       CHAR_UNDERSCORE: get_seg = 8'h08;  // _
       CHAR_BLK: get_seg = 8'h00;  // 空白

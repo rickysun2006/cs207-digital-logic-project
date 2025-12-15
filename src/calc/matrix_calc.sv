@@ -44,6 +44,7 @@ module matrix_calc_sys (
     output matrix_element_t                alu_scalar_out,  // Converted Scalar Value
     input  wire                            alu_done,
     input  wire                            alu_err,
+    input  wire             [        31:0] alu_cycle_cnt,   // Performance Counter
 
     // 2. To Result Printer
     input  wire  printer_done,
@@ -316,6 +317,11 @@ module matrix_calc_sys (
             // Store ID
             if (target_op == 0) begin
               id_a_reg <= rx_decoded_val;
+              // Fix: For Convolution, the selected matrix is the Kernel, which ALU expects in Matrix B
+              if (op_reg == OP_CONV) begin
+                id_b_reg <= rx_decoded_val;
+              end
+
               // Update Display A
               seg_content[5] <= code_t'((rx_decoded_val / 10) % 10);
               seg_content[4] <= code_t'(rx_decoded_val % 10);
@@ -409,6 +415,19 @@ module matrix_calc_sys (
 
         // 9. Finish
         DONE_WAIT: begin
+          // Display Cycle Count (Hex)
+          // Format: [C] [Y] [C] [L] [Hex3] [Hex2] [Hex1] [Hex0]
+          seg_content <= {
+            CHAR_C,
+            CHAR_Y,
+            CHAR_C,
+            CHAR_L,
+            code_t'(alu_cycle_cnt[15:12]),
+            code_t'(alu_cycle_cnt[11:8]),
+            code_t'(alu_cycle_cnt[7:4]),
+            code_t'(alu_cycle_cnt[3:0])
+          };
+
           if (btn_pos_esc || btn_pos_confirm) begin
             state <= SELECT_OP;  // Start over
           end

@@ -46,3 +46,6 @@ ref/
 
 # report material
 report/
+
+# python cache
+*.pyc

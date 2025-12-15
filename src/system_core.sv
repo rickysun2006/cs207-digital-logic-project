@@ -51,22 +51,21 @@ module system_core (
   //==========================================================================
 
   // --- Wire Aliases ---
-  wire              btn_esc = btn_reset_logic;
+  wire btn_esc = btn_reset_logic;
 
   // --- FSM Signals ---
-  sys_state_t       current_state;
-  logic             fsm_safe_reset_btn;
+  sys_state_t current_state;
+  logic fsm_safe_reset_btn;
 
   // --- Handshake Signals (Done flags) ---
-  logic             input_done;
-  logic             gen_done;
-  logic             display_done;
-  logic             calc_sys_done;  // 计算子系统整体完�?
-
+  logic input_done;
+  logic gen_done;
+  logic display_done;
+  logic calc_sys_done;  // 计算子系统整体完�?  logic             settings_done;
   // --- UART Signals ---
-  logic       [7:0] rx_byte;
-  logic             rx_valid;
-  logic       [7:0] tx_byte;
+  logic [7:0] rx_byte;
+  logic rx_valid;
+  logic [7:0] tx_byte;
   logic tx_start, tx_busy;
   logic sender_done;
 
@@ -91,6 +90,14 @@ module system_core (
   logic [3:0] type_valid_cnt[0:MAT_SIZE_CNT-1];
 
   // --- Functional Module Signals ---
+
+  // 0. Settings
+  logic [3:0] cfg_err_countdown;
+  logic signed [7:0] cfg_val_min;
+  logic signed [7:0] cfg_val_max;
+  logic [7:0] cfg_active_limit;
+  code_t [7:0] set_seg_d;
+  logic [7:0] set_seg_b;
 
   // 1. Matrix Input
   logic inp_err;
@@ -209,6 +216,7 @@ module system_core (
       .gen_done     (gen_done),
       .display_done (display_done),
       .calc_sys_done(calc_sys_done),
+      .settings_done(settings_done),
 
       .current_state(current_state)
   );
@@ -217,8 +225,8 @@ module system_core (
       .clk(clk),
       .rst_n(rst_n),
       .en(1'b1),
-      .cfg_min(DEFAULT_VAL_MIN),
-      .cfg_max(DEFAULT_VAL_MAX),
+      .cfg_min(cfg_val_min),
+      .cfg_max(cfg_val_max),
       .rand_val(rand_val)
   );
 
@@ -243,6 +251,23 @@ module system_core (
   // 3. Functional Modules
   //==========================================================================
 
+  // --- Settings System ---
+  settings_sys u_settings (
+      .clk(clk),
+      .rst_n(rst_n),
+      .start_en(current_state == STATE_SETTINGS),
+      .sw_val(sw_scalar_val),
+      .btn_confirm(btn_confirm),
+      .btn_esc(btn_reset_logic),
+      .cfg_err_countdown(cfg_err_countdown),
+      .cfg_val_min(cfg_val_min),
+      .cfg_val_max(cfg_val_max),
+      .cfg_active_limit(cfg_active_limit),
+      .settings_done(settings_done),
+      .seg_data(set_seg_d),
+      .seg_blink(set_seg_b)
+  );
+
   // --- Matrix Input ---
   matrix_input u_input (
       .clk(clk),
@@ -251,6 +276,8 @@ module system_core (
       .rx_data(rx_byte),
       .rx_done(rx_valid),
       .btn_exit_input(btn_esc),
+      .cfg_val_min(cfg_val_min),
+      .cfg_val_max(cfg_val_max),
       .err(inp_err),
       // Storage Write
       .wr_cmd_new(inp_wr_new),
@@ -370,6 +397,8 @@ module system_core (
       .mat_a_cols(ms_rd_data_A.cols),
       .mat_b_rows(ms_rd_data_B.rows),
       .mat_b_cols(ms_rd_data_B.cols),
+
+      .cfg_err_countdown(cfg_err_countdown),
 
       // Display Slave Control
       .disp_req_en(disp_ext_en),
@@ -559,6 +588,8 @@ module system_core (
       .rd_id_B  (sys_calc_id_B),
       .rd_data_B(ms_rd_data_B),
 
+      .cfg_active_limit(cfg_active_limit),
+
       .total_matrix_cnt(total_matrix_cnt),
       .last_wr_id(ms_last_wr_id),
       .type_valid_cnt(type_valid_cnt)
@@ -608,6 +639,9 @@ module system_core (
       .disp_seg_blink(disp_seg_b),
       .calc_seg_data (calc_seg_d),
       .calc_seg_blink(calc_seg_b),
+
+      .set_seg_data (set_seg_d),
+      .set_seg_blink(set_seg_b),
 
       .seg_data_out (seg_display_data),
       .seg_blink_out(blink_mask)

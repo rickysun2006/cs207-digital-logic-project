@@ -107,7 +107,7 @@ package project_pkg;
     STATE_GEN,          // 2. 矩阵生成
     STATE_DISPLAY,      // 3. 矩阵展示
     STATE_CALC,         // 4. 矩阵计算
-    STATE_SETTINGS      // 5. 系统设置（预留）
+    STATE_SETTINGS      // 5. 系统设置
   } sys_state_t;
 
   //-------------------------------------------------------------------------

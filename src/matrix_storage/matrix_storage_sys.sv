@@ -47,6 +47,9 @@ module matrix_manage_sys (
     input  wire     [MAT_ID_W -1 : 0] rd_id_B,
     output matrix_t                   rd_data_B,
 
+    // --- Configuration ---
+    input wire [PTR_W-1:0] cfg_active_limit,
+
     // --- 统计信息输出 ---
     output reg [MAT_ID_W -1 : 0] total_matrix_cnt,
     output logic [MAT_ID_W -1 : 0] last_wr_id,
@@ -57,7 +60,8 @@ module matrix_manage_sys (
   (* ram_style = "block" *) matrix_t storage[0:MAT_TOTAL_SLOTS-1];
 
   // Pointers & Limits
-  logic [PTR_W-1:0] active_limit = DEFAULT_LIMIT;
+  wire [PTR_W-1:0] active_limit;
+  assign active_limit = cfg_active_limit;
   logic [PTR_W-1:0] ptr_table[0:MAT_SIZE_CNT-1];
 
   // 书签寄存器
@@ -134,7 +138,7 @@ module matrix_manage_sys (
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       latched_wr_id <= '0;
-      active_limit <= DEFAULT_LIMIT;
+      // active_limit <= DEFAULT_LIMIT; // Removed: Driven by input
 
       total_matrix_cnt <= 0;
       for (i = 0; i < MAT_SIZE_CNT; i++) begin

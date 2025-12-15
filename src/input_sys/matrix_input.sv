@@ -32,6 +32,10 @@ module matrix_input (
     // --- 退出输入模式 ---
     input wire btn_exit_input,
 
+    // --- Configuration ---
+    input matrix_element_t cfg_val_min,
+    input matrix_element_t cfg_val_max,
+
     // --- 报错 ---
     output reg err,
 
@@ -65,13 +69,16 @@ module matrix_input (
     output reg    [7:0] seg_blink
 );
   // --- 点亮数码管，指示工作中 ---
-  assign seg_data  = {CHAR_1, CHAR_N, CHAR_P, CHAR_U, CHAR_T, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_data = (state == ERROR_STATE) ? 
+      {CHAR_1, CHAR_N, CHAR_P, CHAR_U, CHAR_T, CHAR_E, CHAR_R, CHAR_R} :
+      {CHAR_1, CHAR_N, CHAR_P, CHAR_U, CHAR_T, CHAR_BLK, CHAR_BLK, CHAR_BLK};
   assign seg_blink = 8'b1111_1111;
 
   // --- 参数定义 ---
   // 500ms @ 100MHz = 50,000,000 cycles
-  // log2(50000000) ≈ 25.57 -> 26 bits
   localparam int TIMEOUT_CYCLES = 50_000_000;
+  // 3s @ 100MHz = 300,000,000 cycles
+  localparam int ERR_TIMEOUT_CYCLES = 300_000_000;
 
   // --- 状态机定义 ---
   typedef enum logic [4:0] {
@@ -104,7 +111,7 @@ module matrix_input (
   reg is_padding_mode;
 
   // 计时器
-  reg [25:0] timer_cnt;
+  reg [28:0] timer_cnt;
 
   // --- decoder ---
   // Modified: Removed ASCII decoding to support full 8-bit binary range from Client
@@ -147,7 +154,9 @@ module matrix_input (
 
       WAIT_DATA: begin
         if (rx_done) begin
-          next_state = WRITE_DATA;
+          if (rx_val_decoded >= cfg_val_min && rx_val_decoded <= cfg_val_max)
+            next_state = WRITE_DATA;
+          else next_state = ERROR_STATE;
         end else if (timer_cnt >= TIMEOUT_CYCLES) begin
           // 用户 500ms 没输入，视为输入结束，自动补0
           next_state = PASTE_ZERO;
@@ -185,12 +194,14 @@ module matrix_input (
           end
         end
       end
-
       ECHO_GAP: if (sender_done) next_state = GET_M;  // 回显完成，回到等待输入
 
-      ERROR_STATE: if (!start_en) next_state = IDLE;
-      DONE:        if (!start_en) next_state = IDLE;
-      default:     next_state = IDLE;
+      ERROR_STATE: begin
+        if (timer_cnt >= ERR_TIMEOUT_CYCLES) next_state = GET_M;
+        else next_state = ERROR_STATE;
+      end
+      DONE:    if (!start_en) next_state = IDLE;
+      default: next_state = IDLE;
     endcase
   end
 
@@ -229,7 +240,10 @@ module matrix_input (
       sender_id <= 0;
       sender_is_last_col <= 0;
 
-      // 计时器控制：只有在 WAIT_DATA 状态下计数，其他状态清零
+      // 计时器控制：if (state == ERROR_STATE) begin
+      if (timer_cnt < ERR_TIMEOUT_CYCLES) begin
+        timer_cnt <= timer_cnt + 1;
+      end else  // 只有在 WAIT_DATA 状态下计数，其他状态清零
       if (state == WAIT_DATA) begin
         if (timer_cnt < TIMEOUT_CYCLES) timer_cnt <= timer_cnt + 1;
       end else begin

@@ -35,6 +35,7 @@ module main_fsm (
     input logic gen_done,
     input logic display_done,
     input logic calc_sys_done,
+    input logic settings_done,
 
     // --- Output ---
     output sys_state_t current_state
@@ -75,9 +76,9 @@ module main_fsm (
             state_next = STATE_GEN;
           end else if (sw_mode_sel[4]) begin
             state_next = STATE_INPUT;
-          end  //else if (sw_mode_sel[3]) begin
-               //state_next = STATE_SETTINGS;
-               //end
+          end else if (sw_mode_sel[3]) begin
+            state_next = STATE_SETTINGS;
+          end
         end
       end
 
@@ -87,8 +88,7 @@ module main_fsm (
       STATE_CALC:    if (calc_sys_done) state_next = STATE_IDLE;
 
       STATE_SETTINGS: begin
-        // TODO: 添加设置子系统完成后的跳转逻辑
-        state_next = STATE_IDLE;
+        if (settings_done) state_next = STATE_IDLE;
       end
 
       default: state_next = STATE_IDLE;

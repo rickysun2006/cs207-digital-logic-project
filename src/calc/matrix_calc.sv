@@ -37,6 +37,9 @@ module matrix_calc_sys (
     input wire [ROW_IDX_W-1:0] mat_b_rows,
     input wire [COL_IDX_W-1:0] mat_b_cols,
 
+    // --- Configuration ---
+    input wire [3:0] cfg_err_countdown,
+
     // --- UART Interaction (For selecting Matrix IDs) ---
     input wire [7:0] rx_data,
     input wire       rx_done,
@@ -420,7 +423,7 @@ module matrix_calc_sys (
             end else begin
               state <= ERROR_COUNTDOWN;
               err_timer <= 0;
-              err_countdown_val <= 10;  // Default 10s
+              err_countdown_val <= cfg_err_countdown;  // Use Config
               calc_err <= 1;  // Turn on LED
             end
           end
@@ -505,7 +508,7 @@ module matrix_calc_sys (
               state <= EXEC_ALU;
             end else begin
               // Reset countdown
-              err_countdown_val <= 10;
+              err_countdown_val <= cfg_err_countdown;
               err_timer <= 0;
             end
           end else if (btn_pos_esc) begin

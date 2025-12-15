@@ -37,6 +37,9 @@ module seg_controller (
     input code_t [7:0] calc_seg_data,
     input        [7:0] calc_seg_blink,
 
+    input code_t [7:0] set_seg_data,
+    input        [7:0] set_seg_blink,
+
     // --- Output to Driver ---
     output code_t [7:0] seg_data_out,
     output reg    [7:0] seg_blink_out
@@ -74,6 +77,10 @@ module seg_controller (
           seg_data_out = {
             CHAR_1, CHAR_1, CHAR_1, CHAR_1, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
           };  // Input
+        else if (sw_mode_sel[3])
+          seg_data_out = {
+            CHAR_S, CHAR_E, CHAR_T, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+          };  // Settings
         else seg_data_out = {CHAR_H, CHAR_E, CHAR_1, CHAR_1, CHAR_0, CHAR_BLK, CHAR_BLK, CHAR_BLK};
       end
 
@@ -98,6 +105,11 @@ module seg_controller (
       STATE_CALC: begin
         seg_data_out  = calc_seg_data;
         seg_blink_out = calc_seg_blink;
+      end
+
+      STATE_SETTINGS: begin
+        seg_data_out  = set_seg_data;
+        seg_blink_out = set_seg_blink;
       end
 
       default: ;

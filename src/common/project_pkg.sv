@@ -57,6 +57,11 @@ package project_pkg;
   localparam int MAT_TOTAL_SLOTS = MAT_SIZE_CNT * PHYSICAL_MAX_PER_DIM;  // 存储上限
   localparam int MAT_ID_W = $clog2(MAT_TOTAL_SLOTS + 1);  // 矩阵 ID 位宽
 
+  // RAM 存储参数
+  localparam int MAT_MAX_ELEMENTS = MAX_ROWS * MAX_COLS; // 80
+  localparam int MAT_RAM_DEPTH = MAT_TOTAL_SLOTS * MAT_MAX_ELEMENTS; // 160 * 80 = 12800
+  localparam int MAT_RAM_ADDR_W = $clog2(MAT_RAM_DEPTH);
+
   // 默认逻辑上限，配置此处
   localparam int DEFAULT_LIMIT = 2;
 

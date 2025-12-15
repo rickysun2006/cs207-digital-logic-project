@@ -38,6 +38,7 @@ module output_controller (
     input wire                            disp_sender_sum_head,
     input wire                            disp_sender_sum_elem,
     input wire             [MAT_ID_W-1:0] disp_rd_id,            // Display 需要读 RAM
+    input wire                            disp_slave_en,         // Display Slave Mode Enable
 
     // --- Source 3: From Matrix Result Printer (ALU Result) ---
     input wire             res_sender_start,
@@ -135,7 +136,8 @@ module output_controller (
       // --------------------------------------------------------
       STATE_CALC: begin
         // Priority: Display (Slave Mode) > Result Printer
-        if (disp_sender_start) begin
+        // If Display is active (Slave Mode), give it control of Read ID and UART
+        if (disp_slave_en) begin
           mux_sender_start    = disp_sender_start;
           mux_sender_data     = disp_sender_data;
           mux_sender_last_col = disp_sender_last_col;
@@ -149,6 +151,7 @@ module output_controller (
           mux_sender_data     = res_sender_data;
           mux_sender_last_col = res_sender_last_col;
           mux_sender_newline  = res_sender_newline;
+          // mux_rd_id_A remains default (alu_rd_id_A)
         end
       end
 

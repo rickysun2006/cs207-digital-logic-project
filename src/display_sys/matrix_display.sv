@@ -1,8 +1,8 @@
 /*=============================================================================
 #
 # Project Name   : CS207_Project_Matrix_Calculator
-# File Name      : matrix_uart_sender.sv
-# Module Name    : matrix_uart_sender
+# File Name      : matrix_display.sv
+# Module Name    : matrix_display
 # University     : SUSTech
 #
 # Create Date    : 2025-12-10
@@ -16,6 +16,7 @@
 # Ver   |   Date     |   Author       |   Description
 # -----------------------------------------------------------------------------
 # v1.0  | 2025-12-10 | DraTelligence  |   Initial creation
+# v1.1  | 2025-12-15 | GitHub Copilot |   Refactored to use Scalar RAM Interface
 #
 #=============================================================================*/
 `include "../common/project_pkg.sv"
@@ -38,12 +39,16 @@ module matrix_display (
     input  wire [COL_IDX_W-1:0] ext_n,
     output reg                  ext_done,
 
-    // --- 存储读取接口 ---
+    // --- 存储读取接口 (Scalar) ---
     output reg           [MAT_ID_W-1:0] rd_id,
-    input  wire matrix_t                rd_data, // 组合逻辑读取
+    output reg           [ROW_IDX_W-1:0] rd_row,
+    output reg           [COL_IDX_W-1:0] rd_col,
+    input  matrix_element_t              rd_val,
+    input  wire          [ROW_IDX_W-1:0] rd_dims_r,
+    input  wire          [COL_IDX_W-1:0] rd_dims_c,
 
     // --- 统计信息接口 (From Storage) ---
-    input wire [7:0] total_matrix_cnt,
+    input wire [MAT_ID_W-1:0] total_matrix_cnt,
     input wire [3:0] type_valid_cnt  [0:MAT_SIZE_CNT-1],
 
     // --- Sender 接口 ---
@@ -101,16 +106,18 @@ module matrix_display (
 
     // --- 详情阶段 ---
     DET_CALC_BASE,   // 计算起始 ID
-    DET_READ_RAM,    // 读内存
+    DET_READ_META,   // 读元数据 (Wait for dims)
     DET_PRINT_ID,    // 打印 "ID"
     DET_WAIT_ID,
+    DET_FETCH_CELL,  // 设置读地址
+    DET_WAIT_RAM,    // 等待 RAM
     DET_PRINT_CELL,  // 打印数据
     DET_WAIT_CELL,
     DET_GAP,         // 矩阵间空行
     DET_NEXT_MAT     // 下一个矩阵
   } state_t;
 
-  state_t state, next_state;
+  state_t state;
 
   // --- 内部变量 ---
   reg [          4:0] scan_idx;  // 遍历类型 (0~24)
@@ -124,12 +131,10 @@ module matrix_display (
   logic [COL_IDX_W-1:0] cmd_n_val;
 
   // 辅助计算 (Raw Hex Mode)
-  // 直接截取低位，不再减 0x30
   assign cmd_m_val = cmd_m_raw[ROW_IDX_W-1:0];
   assign cmd_n_val = cmd_n_raw[COL_IDX_W-1:0];
 
   // 从索引反推 M, N (用于 Summary 打印)
-  // idx = (m-1)*5 + (n-1)
   wire [ROW_IDX_W-1:0] scan_m = (scan_idx / MAX_COLS) + 1;
   wire [COL_IDX_W-1:0] scan_n = (scan_idx % MAX_COLS) + 1;
 
@@ -143,6 +148,8 @@ module matrix_display (
       state <= IDLE;
       scan_idx <= 0;
       rd_id <= 0;
+      rd_row <= 0;
+      rd_col <= 0;
       display_done <= 0;
       sender_start <= 0;
       // 信号复位
@@ -151,6 +158,11 @@ module matrix_display (
       sender_sum_head <= 0;
       sender_sum_elem <= 0;
       sender_is_last_col <= 0;
+      ext_done <= 0;
+      mats_printed <= 0;
+      cur_r <= 0;
+      cur_c <= 0;
+      val_latch <= 0;
     end else begin
       // Pulse 复位
       sender_start <= 0;
@@ -183,7 +195,7 @@ module matrix_display (
         // 1. 自动统计 (Summary Table)
         // ======================================================
         SUM_HEAD: begin
-          val_latch <= signed'({1'b0, total_matrix_cnt});  // 传入总数
+          val_latch <= signed'({{(DATA_WIDTH-MAT_ID_W){1'b0}}, total_matrix_cnt});  // 传入总数
           sender_start <= 1;
           sender_sum_head <= 1;  // 触发表头打印逻辑
           state <= SUM_WAIT_HEAD;
@@ -197,11 +209,9 @@ module matrix_display (
         end
 
         // 打印表格行: | M | N | Cnt |
-        // 我们利用 sender_sum_elem 模式，分三次调用
-
         // 1. 发送 M
         SUM_PRINT_ROW_M: begin
-          val_latch <= signed'({1'b0, scan_m});
+          val_latch <= signed'({{(DATA_WIDTH-ROW_IDX_W){1'b0}}, scan_m});
           sender_start <= 1;
           sender_sum_elem <= 1;
           sender_is_last_col <= 0;  // 不是行尾
@@ -211,7 +221,7 @@ module matrix_display (
 
         // 2. 发送 N
         SUM_PRINT_ROW_N: begin
-          val_latch <= signed'({1'b0, scan_n});
+          val_latch <= signed'({{(DATA_WIDTH-COL_IDX_W){1'b0}}, scan_n});
           sender_start <= 1;
           sender_sum_elem <= 1;
           sender_is_last_col <= 0;
@@ -221,7 +231,7 @@ module matrix_display (
 
         // 3. 发送 Count (行尾)
         SUM_PRINT_ROW_CNT: begin
-          val_latch <= signed'({1'b0, type_valid_cnt[scan_idx]});
+          val_latch <= signed'({{(DATA_WIDTH-4){1'b0}}, type_valid_cnt[scan_idx]});
           sender_start <= 1;
           sender_sum_elem <= 1;
           sender_is_last_col <= 1;  // 触发 Sender 打印行尾分割线
@@ -303,11 +313,11 @@ module matrix_display (
             end else begin
               state <= WAIT_INPUT_M;
             end
-          end else state <= DET_READ_RAM;
+          end else state <= DET_READ_META;
         end
 
-        DET_READ_RAM: begin
-          // RAM 读延迟
+        DET_READ_META: begin
+          // Wait for dims to be valid (combinational from storage)
           state <= DET_PRINT_ID;
           cur_r <= 0;
           cur_c <= 0;
@@ -315,7 +325,7 @@ module matrix_display (
 
         // 1. 打印 ID
         DET_PRINT_ID: begin
-          val_latch <= signed'({1'b0, rd_id});
+          val_latch <= signed'({{(DATA_WIDTH-MAT_ID_W){1'b0}}, rd_id});
           sender_start <= 1;
           sender_id <= 1;  // 告诉 Sender 这是一个 ID，不用补齐
           sender_is_last_col <= 1;  // 后面跟换行
@@ -324,15 +334,25 @@ module matrix_display (
         DET_WAIT_ID: begin
           sender_id <= 1;
           sender_is_last_col <= 1;
-          if (sender_done) state <= DET_PRINT_CELL;
+          if (sender_done) state <= DET_FETCH_CELL;
         end
 
         // 2. 打印矩阵元素
+        DET_FETCH_CELL: begin
+          rd_row <= cur_r;
+          rd_col <= cur_c;
+          state <= DET_WAIT_RAM;
+        end
+
+        DET_WAIT_RAM: begin
+          state <= DET_PRINT_CELL;
+        end
+
         DET_PRINT_CELL: begin
-          val_latch <= rd_data.cells[cur_r][cur_c];
+          val_latch <= rd_val;
           sender_start <= 1;
 
-          if (cur_c == rd_data.cols - 1) sender_is_last_col <= 1;
+          if (cur_c == rd_dims_c - 1) sender_is_last_col <= 1;
           else sender_is_last_col <= 0;
 
           state <= DET_WAIT_CELL;
@@ -340,21 +360,21 @@ module matrix_display (
 
         DET_WAIT_CELL: begin
           // 保持信号，防止被 Pulse 复位逻辑清零
-          if (cur_c == rd_data.cols - 1) sender_is_last_col <= 1;
+          if (cur_c == rd_dims_c - 1) sender_is_last_col <= 1;
 
           if (sender_done) begin
             // 游标更新
-            if (cur_c == rd_data.cols - 1) begin
+            if (cur_c == rd_dims_c - 1) begin
               cur_c <= 0;
-              if (cur_r == rd_data.rows - 1) begin
+              if (cur_r == rd_dims_r - 1) begin
                 state <= DET_GAP;  // 矩阵结束
               end else begin
                 cur_r <= cur_r + 1;
-                state <= DET_PRINT_CELL;  // 下一行
+                state <= DET_FETCH_CELL;  // 下一行
               end
             end else begin
               cur_c <= cur_c + 1;
-              state <= DET_PRINT_CELL;  // 下一列
+              state <= DET_FETCH_CELL;  // 下一列
             end
           end
         end
@@ -372,7 +392,7 @@ module matrix_display (
             if (mats_printed < type_valid_cnt[scan_idx] - 1) begin
               mats_printed <= mats_printed + 1;
               rd_id <= rd_id + 1;
-              state <= DET_READ_RAM;
+              state <= DET_READ_META;
             end else begin
               // 全部打印完，回等待命令
               if (ext_en) begin

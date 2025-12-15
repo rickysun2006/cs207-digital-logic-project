@@ -235,12 +235,19 @@ module matrix_calc_sys (
 
         // Step 1: Show Summary
         SEL_SHOW_SUM: begin
-          // Display: "A" or "B"
-          seg_content <= {
-            CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
-          };
-          if (target_op == 0) seg_content[7] <= CHAR_A;
-          else seg_content[3] <= CHAR_B;
+          if (target_op == 0) begin
+            // Selecting A: Clear all, show 'A'
+            seg_content <= {
+              CHAR_A, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
+            };
+          end else begin
+            // Selecting B: Keep A's info (Left 4), Clear Right 4, show 'b'
+            // Note: seg_content[7:4] holds "A _ ID ID"
+            seg_content[3] <= CHAR_B;
+            seg_content[2] <= CHAR_BLK;
+            seg_content[1] <= CHAR_BLK;
+            seg_content[0] <= CHAR_BLK;
+          end
 
           disp_req_en <= 1;
           disp_req_cmd <= 1;  // Summary

@@ -66,59 +66,56 @@ module matrix_alu (
   logic signed [23:0] accum;
   logic signed [23:0] current_prod;
 
-  // --- Hardcoded Image Data (Keep your original ROM data) ---
-  logic [3:0] img_data[0:119];
-  initial begin
-    // 第 1 行: 3 7 2 9 0 5 1 8 4 6 3 2
-    img_data[0] = 4'd3; img_data[1] = 4'd7; img_data[2] = 4'd2; img_data[3] = 4'd9;
-    img_data[4] = 4'd0; img_data[5] = 4'd5; img_data[6] = 4'd1; img_data[7] = 4'd8;
-    img_data[8] = 4'd4; img_data[9] = 4'd6; img_data[10] = 4'd3; img_data[11] = 4'd2;
+  // --- Optimization: Row Cache for Matrix A ---
+  // Caches one row of Matrix A to reduce MUX complexity during Matrix Mul
+  matrix_element_t row_cache_A [0:MAX_COLS-1];
 
-    // 第 2 行: 8 1 6 4 7 3 9 0 5 2 8 1
-    img_data[12] = 4'd8; img_data[13] = 4'd1; img_data[14] = 4'd6; img_data[15] = 4'd4;
-    img_data[16] = 4'd7; img_data[17] = 4'd3; img_data[18] = 4'd9; img_data[19] = 4'd0;
-    img_data[20] = 4'd5; img_data[21] = 4'd2; img_data[22] = 4'd8; img_data[23] = 4'd1;
-
-    // 第 3 行: 4 9 0 2 6 8 3 5 7 1 4 9
-    img_data[24] = 4'd4; img_data[25] = 4'd9; img_data[26] = 4'd0; img_data[27] = 4'd2;
-    img_data[28] = 4'd6; img_data[29] = 4'd8; img_data[30] = 4'd3; img_data[31] = 4'd5;
-    img_data[32] = 4'd7; img_data[33] = 4'd1; img_data[34] = 4'd4; img_data[35] = 4'd9;
-
-    // 第 4 行: 7 3 8 5 1 4 9 2 0 6 7 3
-    img_data[36] = 4'd7; img_data[37] = 4'd3; img_data[38] = 4'd8; img_data[39] = 4'd5;
-    img_data[40] = 4'd1; img_data[41] = 4'd4; img_data[42] = 4'd9; img_data[43] = 4'd2;
-    img_data[44] = 4'd0; img_data[45] = 4'd6; img_data[46] = 4'd7; img_data[47] = 4'd3;
-
-    // 第 5 行: 2 6 4 0 8 7 5 3 1 9 2 4
-    img_data[48] = 4'd2; img_data[49] = 4'd6; img_data[50] = 4'd4; img_data[51] = 4'd0;
-    img_data[52] = 4'd8; img_data[53] = 4'd7; img_data[54] = 4'd5; img_data[55] = 4'd3;
-    img_data[56] = 4'd1; img_data[57] = 4'd9; img_data[58] = 4'd2; img_data[59] = 4'd4;
-
-    // 第 6 行: 9 0 7 3 5 2 8 6 4 1 9 0
-    img_data[60] = 4'd9; img_data[61] = 4'd0; img_data[62] = 4'd7; img_data[63] = 4'd3;
-    img_data[64] = 4'd5; img_data[65] = 4'd2; img_data[66] = 4'd8; img_data[67] = 4'd6;
-    img_data[68] = 4'd4; img_data[69] = 4'd1; img_data[70] = 4'd9; img_data[71] = 4'd0;
-
-    // 第 7 行: 5 8 1 6 4 9 2 7 3 0 5 8
-    img_data[72] = 4'd5; img_data[73] = 4'd8; img_data[74] = 4'd1; img_data[75] = 4'd6;
-    img_data[76] = 4'd4; img_data[77] = 4'd9; img_data[78] = 4'd2; img_data[79] = 4'd7;
-    img_data[80] = 4'd3; img_data[81] = 4'd0; img_data[82] = 4'd5; img_data[83] = 4'd8;
-
-    // 第 8 行: 1 4 9 2 7 0 6 8 5 3 1 4
-    img_data[84] = 4'd1; img_data[85] = 4'd4; img_data[86] = 4'd9; img_data[87] = 4'd2;
-    img_data[88] = 4'd7; img_data[89] = 4'd0; img_data[90] = 4'd6; img_data[91] = 4'd8;
-    img_data[92] = 4'd5; img_data[93] = 4'd3; img_data[94] = 4'd1; img_data[95] = 4'd4;
-
-    // 第 9 行: 6 2 5 8 3 1 7 4 9 0 6 2
-    img_data[96] = 4'd6; img_data[97] = 4'd2; img_data[98] = 4'd5; img_data[99] = 4'd8;
-    img_data[100] = 4'd3; img_data[101] = 4'd1; img_data[102] = 4'd7; img_data[103] = 4'd4;
-    img_data[104] = 4'd9; img_data[105] = 4'd0; img_data[106] = 4'd6; img_data[107] = 4'd2;
-
-    // 第 10 行: 0 7 3 9 5 6 4 1 8 2 0 7
-    img_data[108] = 4'd0; img_data[109] = 4'd7; img_data[110] = 4'd3; img_data[111] = 4'd9;
-    img_data[112] = 4'd5; img_data[113] = 4'd6; img_data[114] = 4'd4; img_data[115] = 4'd1;
-    img_data[116] = 4'd8; img_data[117] = 4'd2; img_data[118] = 4'd0; img_data[119] = 4'd7;
-  end
+  // --- Hardcoded Image Data (Optimized as Function) ---
+  function automatic logic [3:0] get_img_data(input int idx);
+    case (idx)
+      // Row 1: 3 7 2 9 0 5 1 8 4 6 3 2
+      0: return 4'd3; 1: return 4'd7; 2: return 4'd2; 3: return 4'd9;
+      4: return 4'd0; 5: return 4'd5; 6: return 4'd1; 7: return 4'd8;
+      8: return 4'd4; 9: return 4'd6; 10: return 4'd3; 11: return 4'd2;
+      // Row 2: 8 1 6 4 7 3 9 0 5 2 8 1
+      12: return 4'd8; 13: return 4'd1; 14: return 4'd6; 15: return 4'd4;
+      16: return 4'd7; 17: return 4'd3; 18: return 4'd9; 19: return 4'd0;
+      20: return 4'd5; 21: return 4'd2; 22: return 4'd8; 23: return 4'd1;
+      // Row 3: 4 9 0 2 6 8 3 5 7 1 4 9
+      24: return 4'd4; 25: return 4'd9; 26: return 4'd0; 27: return 4'd2;
+      28: return 4'd6; 29: return 4'd8; 30: return 4'd3; 31: return 4'd5;
+      32: return 4'd7; 33: return 4'd1; 34: return 4'd4; 35: return 4'd9;
+      // Row 4: 7 3 8 5 1 4 9 2 0 6 7 3
+      36: return 4'd7; 37: return 4'd3; 38: return 4'd8; 39: return 4'd5;
+      40: return 4'd1; 41: return 4'd4; 42: return 4'd9; 43: return 4'd2;
+      44: return 4'd0; 45: return 4'd6; 46: return 4'd7; 47: return 4'd3;
+      // Row 5: 2 6 4 0 8 7 5 3 1 9 2 4
+      48: return 4'd2; 49: return 4'd6; 50: return 4'd4; 51: return 4'd0;
+      52: return 4'd8; 53: return 4'd7; 54: return 4'd5; 55: return 4'd3;
+      56: return 4'd1; 57: return 4'd9; 58: return 4'd2; 59: return 4'd4;
+      // Row 6: 9 0 7 3 5 2 8 6 4 1 9 0
+      60: return 4'd9; 61: return 4'd0; 62: return 4'd7; 63: return 4'd3;
+      64: return 4'd5; 65: return 4'd2; 66: return 4'd8; 67: return 4'd6;
+      68: return 4'd4; 69: return 4'd1; 70: return 4'd9; 71: return 4'd0;
+      // Row 7: 5 8 1 6 4 9 2 7 3 0 5 8
+      72: return 4'd5; 73: return 4'd8; 74: return 4'd1; 75: return 4'd6;
+      76: return 4'd4; 77: return 4'd9; 78: return 4'd2; 79: return 4'd7;
+      80: return 4'd3; 81: return 4'd0; 82: return 4'd5; 83: return 4'd8;
+      // Row 8: 1 4 9 2 7 0 6 8 5 3 1 4
+      84: return 4'd1; 85: return 4'd4; 86: return 4'd9; 87: return 4'd2;
+      88: return 4'd7; 89: return 4'd0; 90: return 4'd6; 91: return 4'd8;
+      92: return 4'd5; 93: return 4'd3; 94: return 4'd1; 95: return 4'd4;
+      // Row 9: 6 2 5 8 3 1 7 4 9 0 6 2
+      96: return 4'd6; 97: return 4'd2; 98: return 4'd5; 99: return 4'd8;
+      100: return 4'd3; 101: return 4'd1; 102: return 4'd7; 103: return 4'd4;
+      104: return 4'd9; 105: return 4'd0; 106: return 4'd6; 107: return 4'd2;
+      // Row 10: 0 7 3 9 5 6 4 1 8 2 0 7
+      108: return 4'd0; 109: return 4'd7; 110: return 4'd3; 111: return 4'd9;
+      112: return 4'd5; 113: return 4'd6; 114: return 4'd4; 115: return 4'd1;
+      116: return 4'd8; 117: return 4'd2; 118: return 4'd0; 119: return 4'd7;
+      default: return 4'd0;
+    endcase
+  endfunction
 
   // Helper function for saturation
   function automatic matrix_element_t saturate(input logic signed [23:0] val);
@@ -203,6 +200,8 @@ module matrix_alu (
                   limit_j <= matrix_B.cols;
                   limit_k <= matrix_A.cols;  // The common dimension
                   state <= ALU_EXEC;
+                  // Optimization: Preload Row Cache
+                  row_cache_A <= matrix_A.cells[0];
                 end
               end
 
@@ -276,16 +275,15 @@ module matrix_alu (
 
             // --- Complex Operation: Matrix Mul (Serialized Loop) ---
             OP_MAT_MUL: begin
-              // Accumulate: sum += A[i][k] * B[k][j]
-              // Note: We use one extra cycle per element to write back, or optimize inside loop.
-              // Here: Accumulate in 'accum'. When k reaches limit, write and reset.
-
-              accum <= accum + (24'(signed'(matrix_A.cells[cnt_i][cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])));
+              // Accumulate: sum += row_cache_A[k] * B[k][j]
+              // Optimization: Use row_cache_A instead of matrix_A.cells[cnt_i] to reduce MUX size
+              
+              accum <= accum + (24'(signed'(row_cache_A[cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])));
 
               if (cnt_k == limit_k - 1) begin
                 // Dot product finished for this cell
                 result_matrix.cells[cnt_i][cnt_j] <= saturate(
-                    accum + (24'(signed'(matrix_A.cells[cnt_i][cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])))
+                    accum + (24'(signed'(row_cache_A[cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])))
                 );
                 accum <= 0;  // Reset for next cell
                 cnt_k <= 0;
@@ -296,7 +294,11 @@ module matrix_alu (
                   if (cnt_i == limit_i - 1) begin
                     result_matrix.is_valid <= 1;
                     state <= ALU_DONE;
-                  end else cnt_i <= cnt_i + 1;
+                  end else begin
+                    cnt_i <= cnt_i + 1;
+                    // Optimization: Update Row Cache for next row
+                    row_cache_A <= matrix_A.cells[cnt_i + 1];
+                  end
                 end else cnt_j <= cnt_j + 1;
 
               end else begin
@@ -319,7 +321,8 @@ module matrix_alu (
               conv_sum_temp = 0;
               for (int r = 0; r < 3; r++) begin
                 for (int c = 0; c < 3; c++) begin
-                  conv_sum_temp += 24'(signed'({4'b0, img_data[(cnt_i + r) * 12 + (cnt_j + c)]})) * 24'(signed'(matrix_B.cells[r][c]));
+                  // Optimization: Use get_img_data function and explicit shift for index
+                  conv_sum_temp += 24'(signed'({4'b0, get_img_data(((cnt_i + r) << 3) + ((cnt_i + r) << 2) + (cnt_j + c))})) * 24'(signed'(matrix_B.cells[r][c]));
                 end
               end
 

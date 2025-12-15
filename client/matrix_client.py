@@ -343,6 +343,74 @@ class StorageControl(ft.Column):
         except:
             pass
 
+class CalcControl(ft.Column):
+    def __init__(self, on_send_id):
+        super().__init__()
+        self.on_send_id = on_send_id
+        self.spacing = 15
+        
+        self.id_field = ft.TextField(
+            label="Matrix ID", value="0", width=100, 
+            text_size=14, content_padding=10, text_align=ft.TextAlign.CENTER,
+            border_color=ft.Colors.PRIMARY,
+            keyboard_type=ft.KeyboardType.NUMBER
+        )
+
+        self.controls = [
+            ft.Text("Send Matrix ID for Calculation:", size=12, color=ft.Colors.OUTLINE),
+            ft.Row([
+                self.id_field,
+                ft.ElevatedButton(
+                    "Send ID", 
+                    icon=ft.Icons.SEND, 
+                    on_click=self.send_id,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.SECONDARY,
+                        color=ft.Colors.ON_SECONDARY,
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                    )
+                )
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Text("Used in Calc Mode (A/B selection)", size=10, color=ft.Colors.OUTLINE, italic=True)
+        ]
+
+    def send_id(self, e):
+        try:
+            val = int(self.id_field.value)
+            if val < 0 or val > 255:
+                if self.page: self.page.show_snack_bar(ft.SnackBar(content=ft.Text("ID must be 0-255"), bgcolor="red"))
+                return
+            self.on_send_id(val)
+        except:
+            pass
+
+class GenericControl(ft.Column):
+    def __init__(self, on_send_ascii, on_send_hex):
+        super().__init__()
+        self.on_send_ascii = on_send_ascii
+        self.on_send_hex = on_send_hex
+        self.spacing = 15
+        
+        self.cmd_input = ft.TextField(
+            label="Command Payload", 
+            hint_text="Text or Hex (e.g. AA BB)",
+            text_size=14, 
+            content_padding=10,
+            border_color=ft.Colors.PRIMARY,
+            multiline=True,
+            min_lines=2,
+            max_lines=4
+        )
+
+        self.controls = [
+            self.cmd_input,
+            ft.Row([
+                ft.ElevatedButton("Send ASCII", on_click=lambda e: self.on_send_ascii(self.cmd_input.value), expand=True),
+                ft.ElevatedButton("Send Hex", on_click=lambda e: self.on_send_hex(self.cmd_input.value), expand=True),
+            ]),
+            ft.Text("Hex: Space separated (e.g. '01 02 FF')", size=10, color=ft.Colors.OUTLINE, italic=True)
+        ]
+
 # ==============================================================================
 # Main Application
 # ==============================================================================
@@ -563,6 +631,40 @@ def main(page: ft.Page):
         else:
             log("Cannot send: Disconnected", "error")
 
+    def send_calc_id(matrix_id):
+        if not serial_manager.is_connected:
+            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            return
+        # Send raw byte for ID
+        if serial_manager.send_bytes(bytes([matrix_id])):
+            log(f"Sent Matrix ID: {matrix_id}", "tx")
+        else:
+            log("Cannot send: Disconnected", "error")
+
+    def send_raw_ascii(text):
+        if not serial_manager.is_connected:
+            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            return
+        if not text: return
+        if serial_manager.send_bytes(text.encode('utf-8')):
+            log(f"Sent ASCII: {text}", "tx")
+        else:
+            log("Cannot send: Disconnected", "error")
+
+    def send_raw_hex(text):
+        if not serial_manager.is_connected:
+            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            return
+        if not text: return
+        try:
+            # Clean string: remove 0x, commas, etc
+            clean = text.replace("0x", "").replace(",", " ").replace("\n", " ")
+            bytes_data = bytes.fromhex(clean)
+            if serial_manager.send_bytes(bytes_data):
+                log(f"Sent Hex: {bytes_data.hex().upper()}", "tx")
+        except Exception as e:
+            log(f"Hex Error: {e}", "error")
+
     # --- Theme Toggle ---
     def toggle_theme(e):
         page.theme_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
@@ -618,19 +720,36 @@ def main(page: ft.Page):
 
     # --- Main Content (Right) ---
     
-    matrix_section = StyledCard(
-        title="Matrix Input", icon=ft.Icons.APPS,
-        content=MatrixInput(send_matrix_payload)
-    )
-
+    # Define result_section here so it's available for the Dashboard tab
+    matrix_output = MatrixOutput() # Create instance first to use in callback
     result_section = StyledCard(
         title="Matrix Output", icon=ft.Icons.APPS,
-        content=MatrixOutput()
+        content=matrix_output
     )
 
-    storage_section = StyledCard(
-        title="Storage Viewer", icon=ft.Icons.STORAGE,
-        content=StorageControl(send_storage_refresh, send_storage_fetch)
+    # Tabs for Modes
+    mode_tabs = ft.Tabs(
+        selected_index=0,
+        animation_duration=300,
+        tabs=[
+            ft.Tab(
+                text="Input", icon=ft.Icons.GRID_ON, 
+                content=ft.Container(content=MatrixInput(send_matrix_payload), padding=10)
+            ),
+            ft.Tab(
+                text="View", icon=ft.Icons.STORAGE, 
+                content=ft.Container(content=StorageControl(send_storage_refresh, send_storage_fetch), padding=10)
+            ),
+            ft.Tab(
+                text="Calc", icon=ft.Icons.CALCULATE, 
+                content=ft.Container(content=CalcControl(send_calc_id), padding=10)
+            ),
+            ft.Tab(
+                text="CMD", icon=ft.Icons.CODE, 
+                content=ft.Container(content=GenericControl(send_raw_ascii, send_raw_hex), padding=10)
+            ),
+        ],
+        expand=True,
     )
 
     sidebar = ft.Container(
@@ -672,11 +791,22 @@ def main(page: ft.Page):
                 ])
             ),
 
-            # 4. Matrix Input
-            matrix_section,
-            
-            # 5. Storage Viewer
-            storage_section,
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+
+            # 4. Mode Tabs (Replaces individual cards)
+            ft.Container(
+                content=mode_tabs,
+                bgcolor=ft.Colors.SURFACE,
+                border_radius=12,
+                padding=5,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=10,
+                    color="#1A000000",
+                    offset=ft.Offset(0, 4),
+                ),
+                height=500 # Give it some height or let it expand if needed, but sidebar is scrollable
+            ),
             
             ft.Container(expand=True),
             ft.Text("Designed with Flet", size=10, color=ft.Colors.OUTLINE, text_align=ft.TextAlign.CENTER)

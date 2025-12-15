@@ -38,6 +38,7 @@ module output_controller (
     input wire                            disp_sender_sum_head,
     input wire                            disp_sender_sum_elem,
     input wire             [MAT_ID_W-1:0] disp_rd_id,            // Display 需要读 RAM
+    input wire                            disp_active,           // Display 模块处于活动状态
 
     // --- Source 3: From Matrix Result Printer (ALU Result) ---
     input wire             res_sender_start,
@@ -135,7 +136,8 @@ module output_controller (
       // --------------------------------------------------------
       STATE_CALC: begin
         // Priority: Display (Slave Mode) > Result Printer
-        if (disp_sender_start) begin
+        // Fix: Use disp_active to switch read ID even when not sending (e.g. reading RAM)
+        if (disp_active) begin
           mux_sender_start    = disp_sender_start;
           mux_sender_data     = disp_sender_data;
           mux_sender_last_col = disp_sender_last_col;

@@ -59,6 +59,7 @@ module matrix_display (
 
     // --- 状态指示 ---
     output reg display_done,  // 退出 Display 模式信号
+    output wire display_active, // 活动状态指示
 
     // --- 预留数码管输出接口 ---
     output code_t [7:0] seg_data,
@@ -108,7 +109,8 @@ module matrix_display (
     DET_PRINT_CELL,  // 打印数据
     DET_WAIT_CELL,
     DET_GAP,         // 矩阵间空行
-    DET_NEXT_MAT     // 下一个矩阵
+    DET_NEXT_MAT,    // 下一个矩阵
+    WAIT_EXT_LOW     // 等待外部使能拉低 (Handshake Fix)
   } state_t;
 
   state_t state, next_state;
@@ -118,6 +120,9 @@ module matrix_display (
   reg [          3:0] mats_printed;  // 当前类型已打印数量
   reg [ROW_IDX_W-1:0] cur_r;  // 行游标
   reg [COL_IDX_W-1:0] cur_c;  // 列游标
+
+  // 状态指示
+  assign display_active = (state != IDLE);
 
   // 命令缓存
   reg [7:0] cmd_m_raw, cmd_n_raw;
@@ -255,11 +260,15 @@ module matrix_display (
             sender_newline_only <= 1;  // 表格后空一行
             if (ext_en) begin
               ext_done <= 1;
-              state <= IDLE;
+              state <= WAIT_EXT_LOW;
             end else begin
               state <= WAIT_INPUT_M;
             end
           end
+        end
+
+        WAIT_EXT_LOW: begin
+          if (!ext_en) state <= IDLE;
         end
 
         // ======================================================
@@ -394,7 +403,7 @@ module matrix_display (
               // 全部打印完，回等待命令
               if (ext_en) begin
                 ext_done <= 1;
-                state <= IDLE;
+                state <= WAIT_EXT_LOW;
               end else begin
                 state <= WAIT_INPUT_M;
               end

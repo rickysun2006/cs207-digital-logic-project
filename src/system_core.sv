@@ -313,6 +313,7 @@ module system_core (
   logic [1:0] disp_ext_cmd;
   logic [ROW_IDX_W-1:0] disp_ext_m;
   logic [COL_IDX_W-1:0] disp_ext_n;
+  logic disp_active;
 
   matrix_display u_display (
       .clk(clk),
@@ -347,7 +348,8 @@ module system_core (
       .seg_blink(disp_seg_b),
 
       // Done flag
-      .display_done(display_done)
+      .display_done  (display_done),
+      .display_active(disp_active)
   );
 
   // --- Calculation Sub-System ---
@@ -494,6 +496,7 @@ module system_core (
       .disp_sender_sum_head(disp_snd_head),
       .disp_sender_sum_elem(disp_snd_elem),
       .disp_rd_id(disp_rd_id),
+      .disp_active(disp_active),
 
       // Source: Result Printer
       .res_sender_start(res_snd_start),

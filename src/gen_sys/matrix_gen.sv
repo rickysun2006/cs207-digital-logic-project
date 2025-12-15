@@ -199,11 +199,12 @@ module matrix_gen (
         // --- 生成与存储与启动发送 ---
         GEN_WRITE: begin
           if (sender_ready) begin
-            val_latch           <= signed'(rand_val);
+            // Sign-extend 8-bit random value to 32-bit signed integer
+            val_latch           <= {{24{rand_val[7]}}, rand_val};
             wr_cmd_single       <= 1'b1;
             wr_row_idx          <= cnt_m[ROW_IDX_W-1:0];
             wr_col_idx          <= cnt_n[COL_IDX_W-1:0];
-            wr_data             <= signed'(rand_val);
+            wr_data             <= {{24{rand_val[7]}}, rand_val};
 
             sender_start        <= 1'b1;
             sender_newline_only <= 0;  // 正常发送数据

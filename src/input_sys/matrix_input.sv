@@ -117,7 +117,8 @@ module matrix_input (
   // Modified: Removed ASCII decoding to support full 8-bit binary range from Client
   matrix_element_t rx_val_decoded;
   always_comb begin
-    rx_val_decoded = signed'(rx_data);
+    // Sign-extend 8-bit input to 32-bit signed integer
+    rx_val_decoded = {{24{rx_data[7]}}, rx_data};
   end
 
   // --- Sender Mux ---
@@ -240,11 +241,10 @@ module matrix_input (
       sender_id <= 0;
       sender_is_last_col <= 0;
 
-      // 计时器控制：if (state == ERROR_STATE) begin
-      if (timer_cnt < ERR_TIMEOUT_CYCLES) begin
-        timer_cnt <= timer_cnt + 1;
-      end else  // 只有在 WAIT_DATA 状态下计数，其他状态清零
-      if (state == WAIT_DATA) begin
+      // 计时器控制
+      if (state == ERROR_STATE) begin
+        if (timer_cnt < ERR_TIMEOUT_CYCLES) timer_cnt <= timer_cnt + 1;
+      end else if (state == WAIT_DATA) begin
         if (timer_cnt < TIMEOUT_CYCLES) timer_cnt <= timer_cnt + 1;
       end else begin
         timer_cnt <= 0;

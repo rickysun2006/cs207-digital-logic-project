@@ -58,7 +58,9 @@ module matrix_uart_sender (
   typedef enum logic [4:0] {
     IDLE,
     PREPARE,
-    CONVERT,           // New: Sequential BCD conversion
+    DIV_INIT,          // New: Init division
+    DIV_LOOP,          // New: Division loop
+    DIV_UPDATE,        // New: Update result
     SUM_START_PIPE,
     SEND_SIGN,
     SEND_DIGITS,       // New: Loop to send digits
@@ -83,6 +85,12 @@ module matrix_uart_sender (
   logic [3:0] bcd_digits[0:9];  // Buffer for digits (Max 10 for 32-bit)
   logic [3:0] digit_idx;  // Current digit index
   logic [3:0] total_digits;  // Total digits found
+
+  // --- 除法器寄存器 ---
+  logic [31:0] div_quotient;
+  logic [4:0] div_remainder;
+  logic [4:0] div_cnt;
+  logic [4:0] div_temp_rem;
 
   // 模式寄存器 (锁存当前请求类型)
   logic mode_sum_head, mode_sum_elem;
@@ -125,7 +133,7 @@ module matrix_uart_sender (
     endcase
   endfunction
 
-
+  assign div_temp_rem = {div_remainder[3:0], abs_val[div_cnt]};
 
   // --- 状态机 ---
   always_ff @(posedge clk or negedge rst_n) begin
@@ -193,18 +201,40 @@ module matrix_uart_sender (
           is_negative <= (data_latched < 0);
           abs_val     <= (data_latched < 0) ? (~data_latched + 1) : data_latched;
           digit_idx   <= 0;
-          state       <= CONVERT;
+          state       <= DIV_INIT;
         end
 
-        CONVERT: begin
-          bcd_digits[digit_idx] <= abs_val % 10;
-          abs_val <= abs_val / 10;
-
-          if ((abs_val / 10) == 0) begin
+        DIV_INIT: begin
+          if (abs_val < 10) begin
+            // 优化：小于10直接处理
+            bcd_digits[digit_idx] <= abs_val[3:0];
             state <= is_negative ? SEND_SIGN : SEND_DIGITS;
           end else begin
-            digit_idx <= digit_idx + 1;
+            div_quotient <= 0;
+            div_remainder <= 0;
+            div_cnt <= 31;
+            state <= DIV_LOOP;
           end
+        end
+
+        DIV_LOOP: begin
+          if (div_temp_rem >= 10) begin
+            div_remainder <= div_temp_rem - 10;
+            div_quotient[div_cnt] <= 1;
+          end else begin
+            div_remainder <= div_temp_rem;
+            div_quotient[div_cnt] <= 0;
+          end
+
+          if (div_cnt == 0) state <= DIV_UPDATE;
+          else div_cnt <= div_cnt - 1;
+        end
+
+        DIV_UPDATE: begin
+          bcd_digits[digit_idx] <= div_remainder[3:0];
+          abs_val <= div_quotient;
+          digit_idx <= digit_idx + 1;
+          state <= DIV_INIT;
         end
 
         SEND_SIGN: begin

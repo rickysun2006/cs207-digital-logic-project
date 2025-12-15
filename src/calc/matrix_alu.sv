@@ -51,6 +51,7 @@ module matrix_alu (
   typedef enum logic [2:0] {
     ALU_IDLE,
     ALU_EXEC,
+    ALU_ACCUM,    // New state for accumulation
     ALU_WAIT_TX,
     ALU_DONE
   } alu_state_t;
@@ -71,6 +72,7 @@ module matrix_alu (
   // Accumulators (Width expanded to prevent overflow)
   logic signed [31:0] accum;
   logic signed [31:0] current_prod;
+  logic signed [31:0] mul_res_reg;  // New register for multiplication result
 
   // --- Pipeline Registers (Timing Fix) ---
   logic signed [31:0] op_a_reg;
@@ -257,6 +259,7 @@ module matrix_alu (
       limit_k          <= 0;
       perf_cnt         <= 0;
       accum            <= 0;
+      mul_res_reg      <= 0;
       stream_valid_reg <= 0;
     end else begin
       case (state)
@@ -442,12 +445,19 @@ module matrix_alu (
                   op_b_reg   <= 32'(signed'(matrix_B.cells[cnt_k][cnt_j]));
                   pipe_valid <= 1;
                 end else begin
-                  // Stage 2: Accumulate
-                  accum <= accum + (op_a_reg * op_b_reg);
+                  // Stage 2: Multiply
+                  mul_res_reg <= op_a_reg * op_b_reg;
                   pipe_valid <= 0;
-                  cnt_k <= cnt_k + 1;
+                  state <= ALU_ACCUM;
                 end
               end
+            end
+
+            // New State: Accumulate
+            ALU_ACCUM: begin
+              accum <= accum + mul_res_reg;
+              cnt_k <= cnt_k + 1;
+              state <= ALU_EXEC;
             end
 
             // --- Complex Operation: Convolution (Pipelined Streaming) ---

@@ -68,7 +68,7 @@ module matrix_alu (
 
   // --- Optimization: Row Cache for Matrix A ---
   // Caches one row of Matrix A to reduce MUX complexity during Matrix Mul
-  matrix_element_t row_cache_A [0:MAX_COLS-1];
+  matrix_element_t [MAX_COLS-1:0] row_cache_A;
 
   // --- Hardcoded Image Data (Optimized as Function) ---
   function automatic logic [3:0] get_img_data(input int idx);

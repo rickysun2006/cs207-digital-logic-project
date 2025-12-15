@@ -365,6 +365,12 @@ module system_core (
       .rx_data(rx_byte),
       .rx_done(rx_valid),
 
+      // Matrix Dimensions for Validation
+      .mat_a_rows(ms_rd_data_A.rows),
+      .mat_a_cols(ms_rd_data_A.cols),
+      .mat_b_rows(ms_rd_data_B.rows),
+      .mat_b_cols(ms_rd_data_B.cols),
+
       // Display Slave Control
       .disp_req_en(disp_ext_en),
       .disp_req_cmd(disp_ext_cmd),

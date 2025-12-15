@@ -31,6 +31,12 @@ module matrix_calc_sys (
     input wire       btn_confirm,    // Confirm / Enter
     input wire       btn_esc,        // Back / Cancel
 
+    // --- Matrix Dimensions for Validation ---
+    input wire [ROW_IDX_W-1:0] mat_a_rows,
+    input wire [COL_IDX_W-1:0] mat_a_cols,
+    input wire [ROW_IDX_W-1:0] mat_b_rows,
+    input wire [COL_IDX_W-1:0] mat_b_cols,
+
     // --- UART Interaction (For selecting Matrix IDs) ---
     input wire [7:0] rx_data,
     input wire       rx_done,
@@ -90,13 +96,14 @@ module matrix_calc_sys (
     WAIT_PRINT_B,
     CONFIRM_SELECTION,
 
-    CONFIRM_SCALAR,  // Wait for SW Scalar & Confirm (Optional state)
-    EXEC_ALU,        // Trigger ALU
-    WAIT_ALU,        // Wait for ALU completion
-    ERROR_HOLD,      // Error Countdown
-    EXEC_PRINT,      // Trigger Printer
-    WAIT_PRINT,      // Wait for printing
-    DONE_WAIT        // Wait for user to exit or restart
+    CONFIRM_SCALAR,   // Wait for SW Scalar & Confirm (Optional state)
+    EXEC_ALU,         // Trigger ALU
+    WAIT_ALU,         // Wait for ALU completion
+    ERROR_HOLD,       // Error Countdown (ALU Error)
+    ERROR_COUNTDOWN,  // Input Validation Error Countdown
+    EXEC_PRINT,       // Trigger Printer
+    WAIT_PRINT,       // Wait for printing
+    DONE_WAIT         // Wait for user to exit or restart
   } state_t;
 
   state_t state, next_state;
@@ -110,7 +117,8 @@ module matrix_calc_sys (
   op_code_t op_reg;
   reg [MAT_ID_W-1:0] id_a_reg;
   reg [MAT_ID_W-1:0] id_b_reg;
-  reg [28:0] err_timer;  // Enough for 5s
+  reg [31:0] err_timer;  // Enough for 5s
+  reg [3:0] err_countdown_val;  // For 10s countdown
 
   // Interaction Helpers
   reg target_op;  // 0: A, 1: B
@@ -140,6 +148,16 @@ module matrix_calc_sys (
   assign alu_id_B = id_b_reg;
   // Scalar Conversion: Sign-Magnitude (SW) -> Two's Complement (ALU)
   assign alu_scalar_out = scalar_val_in[7] ? (8'd0 - {1'b0, scalar_val_in[6:0]}) : {1'b0, scalar_val_in[6:0]};
+
+  // --- Validation Logic ---
+  function automatic logic check_validity();
+    case (op_reg)
+      OP_ADD: return (mat_a_rows == mat_b_rows) && (mat_a_cols == mat_b_cols);
+      OP_MAT_MUL: return (mat_a_cols == mat_b_rows);
+      // For other ops, assume valid or add specific rules
+      default: return 1'b1;
+    endcase
+  endfunction
 
   // --- State Machine ---
   always_ff @(posedge clk or negedge rst_n) begin
@@ -397,7 +415,14 @@ module matrix_calc_sys (
           if (btn_pos_esc) begin
             state <= SELECT_OP;
           end else if (btn_pos_confirm) begin
-            state <= EXEC_ALU;
+            if (check_validity()) begin
+              state <= EXEC_ALU;
+            end else begin
+              state <= ERROR_COUNTDOWN;
+              err_timer <= 0;
+              err_countdown_val <= 10;  // Default 10s
+              calc_err <= 1;  // Turn on LED
+            end
           end
         end
 
@@ -438,6 +463,58 @@ module matrix_calc_sys (
             state <= DONE_WAIT;
           end
         end
+
+        // 6.5 Input Validation Error Countdown
+        ERROR_COUNTDOWN: begin
+          // Display: A/b _ E r r _ [Tens] [Ones]
+          // Let's use 'b' to indicate we are re-selecting B
+          seg_content <= {
+            CHAR_B,
+            CHAR_BLK,
+            CHAR_E,
+            CHAR_R,
+            CHAR_R,
+            CHAR_BLK,
+            code_t'(err_countdown_val / 10),
+            code_t'(err_countdown_val % 10)
+          };
+
+          // Countdown Logic (1 sec = 100M cycles)
+          if (err_timer >= 100_000_000) begin
+            err_timer <= 0;
+            if (err_countdown_val > 0) begin
+              err_countdown_val <= err_countdown_val - 1;
+            end else begin
+              // Timeout
+              calc_err <= 0;
+              state <= SELECT_OP;
+            end
+          end else begin
+            err_timer <= err_timer + 1;
+          end
+
+          // Re-selection Logic (B)
+          if (rx_done && rx_valid_char) begin
+            id_b_reg <= rx_decoded_val;
+            // Note: We don't update display here because it shows Error
+          end
+
+          if (btn_pos_confirm) begin
+            if (check_validity()) begin
+              calc_err <= 0;
+              state <= EXEC_ALU;
+            end else begin
+              // Reset countdown
+              err_countdown_val <= 10;
+              err_timer <= 0;
+            end
+          end else if (btn_pos_esc) begin
+            calc_err <= 0;
+            state <= SELECT_OP;
+          end
+        end
+
+        // 
 
         // 6. Error Handling (Countdown)
         ERROR_HOLD: begin

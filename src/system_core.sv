@@ -33,16 +33,17 @@ module system_core (
 
     // --- User I/O ---
     input wire [7:0] sw_mode_sel,     // 模式选择 / 运算类型选择
+    input wire [7:0] sw_scalar_val,
     input wire       btn_confirm,     // 确认
     input wire       btn_reset_logic, // 逻辑复位 / 返回 / 结束输入(Esc)
 
     // --- Logical Outputs ---
-    output wire [15:0] led_status,  // 16位 LED 状态指示
+    output wire [15:0] led_status,  // 16�? LED 状�?�指�?
 
     // --- Display Driver Interface ---
-    output wire [7:0] seg_an,      // 数码管位选
-    output wire [7:0] seg_data_0,  // 数码管段选 Group 0 (Right)
-    output wire [7:0] seg_data_1   // 数码管段选 Group 1 (Left)
+    output wire [7:0] seg_an,      // 数码管位�?
+    output wire [7:0] seg_data_0,  // 数码管段�? Group 0 (Right)
+    output wire [7:0] seg_data_1   // 数码管段�? Group 1 (Left)
 );
 
   //==========================================================================
@@ -60,7 +61,7 @@ module system_core (
   logic             input_done;
   logic             gen_done;
   logic             display_done;
-  logic             calc_sys_done;  // 计算子系统整体完成
+  logic             calc_sys_done;  // 计算子系统整体完�?
 
   // --- UART Signals ---
   logic       [7:0] rx_byte;
@@ -85,7 +86,7 @@ module system_core (
   matrix_t ms_rd_data_B;
 
   // Metadata (Storage -> Display)
-  logic [7:0] total_matrix_cnt;  // 修改位宽定义以匹配模块 [7:0]
+  logic [7:0] total_matrix_cnt;  // 修改位宽定义以匹配模�? [7:0]
   logic [MAT_ID_W-1:0] ms_last_wr_id;  // Storage -> Input
   logic [3:0] type_valid_cnt[0:MAT_SIZE_CNT-1];
 
@@ -136,6 +137,7 @@ module system_core (
   logic [MAT_ID_W-1:0] sys_calc_id_A, sys_calc_id_B;
   logic                   sys_calc_err;
   logic                   sys_calc_print_start;
+  matrix_element_t        sys_calc_scalar_val;  // Converted scalar value from Calc Sys
   // Seg
   code_t           [ 7:0] calc_seg_d;
   logic            [ 7:0] calc_seg_b;
@@ -283,6 +285,11 @@ module system_core (
   );
 
   // --- Matrix Display ---
+  logic disp_ext_en, disp_ext_done;
+  logic [1:0] disp_ext_cmd;
+  logic [ROW_IDX_W-1:0] disp_ext_m;
+  logic [COL_IDX_W-1:0] disp_ext_n;
+
   matrix_display u_display (
       .clk(clk),
       .rst_n(rst_n),
@@ -290,6 +297,12 @@ module system_core (
       .rx_data(rx_byte),
       .rx_done(rx_valid),
       .btn_quit(btn_reset_logic),
+      // Slave Mode
+      .ext_en(disp_ext_en),
+      .ext_cmd(disp_ext_cmd),
+      .ext_m(disp_ext_m),
+      .ext_n(disp_ext_n),
+      .ext_done(disp_ext_done),
       // Storage Read
       .rd_id(disp_rd_id),
       .rd_data(ms_rd_data_A),
@@ -318,17 +331,25 @@ module system_core (
       .rst_n(rst_n),
       .start_en(current_state == STATE_CALC),
       .sw_mode_sel(sw_mode_sel),
-      .scalar_val_in(sw_mode_sel),
+      .scalar_val_in(sw_scalar_val),
       .btn_confirm(btn_confirm),
       .btn_esc(btn_reset_logic),
       .rx_data(rx_byte),
       .rx_done(rx_valid),
+
+      // Display Slave Control
+      .disp_req_en(disp_ext_en),
+      .disp_req_cmd(disp_ext_cmd),
+      .disp_req_m(disp_ext_m),
+      .disp_req_n(disp_ext_n),
+      .disp_req_done(disp_ext_done),
 
       // Control ALU
       .alu_start(sys_calc_start_alu),
       .alu_op_code(sys_calc_op),
       .alu_id_A(sys_calc_id_A),
       .alu_id_B(sys_calc_id_B),
+      .alu_scalar_out(sys_calc_scalar_val),
       .alu_done(alu_calc_done),
       .alu_err(alu_err_flag),
 
@@ -353,7 +374,7 @@ module system_core (
       // Data inputs from Storage based on IDs from Calc Sys
       .matrix_A(ms_rd_data_A),
       .matrix_B(ms_rd_data_B),
-      .scalar_val({4'b0, sw_mode_sel[3:0]}),  // Scalar from switches
+      .scalar_val(sys_calc_scalar_val),  // Scalar from Calc Sys (Converted)
 
       .done(alu_calc_done),
       .result_matrix(alu_result_matrix),

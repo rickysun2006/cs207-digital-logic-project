@@ -81,6 +81,7 @@ module matrix_uart_sender (
 
   // 模式寄存器 (锁存当前请求类型)
   logic mode_sum_head, mode_sum_elem;
+  logic mode_last_col, mode_send_id;
 
   // --- 查找表：边框 ---
   function logic [7:0] get_border_char(input integer idx);
@@ -138,6 +139,8 @@ module matrix_uart_sender (
       tx_data <= 0;
       mode_sum_head <= 0;
       mode_sum_elem <= 0;
+      mode_last_col <= 0;
+      mode_send_id <= 0;
     end else begin
       // 默认复位
       tx_start <= 0;
@@ -151,6 +154,8 @@ module matrix_uart_sender (
             // 锁存模式
             mode_sum_head <= send_summary_head;
             mode_sum_elem <= send_summary_elem;
+            mode_last_col <= is_last_col;
+            mode_send_id  <= send_id;
 
             // 优先级判断
             if (send_newline) begin
@@ -232,12 +237,12 @@ module matrix_uart_sender (
         SEND_PADDING: begin
           // 计算目标宽度
           logic [4:0] target_width;
-          if (mode_sum_elem) target_width = is_last_col ? WIDTH_CNT : WIDTH_M_N;
+          if (mode_sum_elem) target_width = mode_last_col ? WIDTH_CNT : WIDTH_M_N;
           else target_width = NORM_WIDTH;
 
           // 1. 发送 ID 模式并换行
-          if (send_id && !mode_sum_head && !mode_sum_elem) begin
-            if (is_last_col) state <= SEND_END;
+          if (mode_send_id && !mode_sum_head && !mode_sum_elem) begin
+            if (mode_last_col) state <= SEND_END;
             else begin
               state <= IDLE;
               sender_done <= 1;
@@ -255,7 +260,7 @@ module matrix_uart_sender (
               // 总数发完了，开始打印表头结构
               state <= SUM_NL_1;
             end else if (mode_sum_elem) begin
-              if (is_last_col) state <= SUM_END_PIPE;  // 行尾处理
+              if (mode_last_col) state <= SUM_END_PIPE;  // 行尾处理
               else begin
                 // 非行尾，发个结束符 '|'
                 state <= IDLE;
@@ -263,7 +268,7 @@ module matrix_uart_sender (
               end
             end else begin
               // 普通模式
-              if (is_last_col) state <= SEND_END;
+              if (mode_last_col) state <= SEND_END;
               else begin
                 state <= IDLE;
                 sender_done <= 1;

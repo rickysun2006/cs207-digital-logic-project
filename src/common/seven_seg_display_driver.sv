@@ -43,33 +43,35 @@ module seven_seg_display_driver (
   // 译码
   function automatic [7:0] get_seg(input code_t num);
     case (num)
-      CHAR_0:   get_seg = 8'h3F;  // 0 0 1 1 1 1 1 1 ->  0
-      CHAR_1:   get_seg = 8'h06;  // 0 0 0 0 0 1 1 0 ->  1
-      CHAR_2:   get_seg = 8'h5B;  // 0 1 0 1 1 0 1 1 ->  2
-      CHAR_3:   get_seg = 8'h4F;  // 0 1 0 0 1 1 1 1 ->  3
-      CHAR_4:   get_seg = 8'h66;  // 0 1 1 0 0 1 1 0 ->  4
-      CHAR_5:   get_seg = 8'h6D;  // 0 1 1 0 1 1 0 1 ->  5
-      CHAR_6:   get_seg = 8'h7D;  // 0 1 1 1 1 1 0 1 ->  6
-      CHAR_7:   get_seg = 8'h07;  // 0 0 0 0 0 1 1 7 ->  7
-      CHAR_8:   get_seg = 8'h7F;  // 0 1 1 1 1 1 1 1 ->  8
-      CHAR_9:   get_seg = 8'h6F;  // 0 1 1 0 1 1 1 1 ->  9
-      CHAR_A:   get_seg = 8'h77;  // 0 1 1 1 0 1 1 7 ->  A (或者 8'h5F 显示 a)
-      CHAR_B:   get_seg = 8'h7C;  // 0 1 1 1 1 1 0 0 ->  b
-      CHAR_C:   get_seg = 8'h39;  // 0 0 1 1 1 0 0 1 ->  C
-      CHAR_D:   get_seg = 8'h5E;  // 0 1 0 1 1 1 1 0 ->  d
-      CHAR_E:   get_seg = 8'h79;  // 0 1 1 1 1 0 0 1 ->  E
-      CHAR_F:   get_seg = 8'h71;  // 0 1 1 1 0 0 0 1 ->  F
-      CHAR_T:   get_seg = 8'h78;  // t
-      CHAR_J:   get_seg = 8'h1E;  // J
-      CHAR_R:   get_seg = 8'h50;  // r
-      CHAR_H:   get_seg = 8'h76;  // H
-      CHAR_P:   get_seg = 8'h73;  // P
-      CHAR_L:   get_seg = 8'h38;  // L
-      CHAR_U:   get_seg = 8'h3E;  // U
-      CHAR_S:   get_seg = 8'h6D;  // S
-      CHAR_N:   get_seg = 8'h54;  // n
+      CHAR_0: get_seg = 8'h3F;  // 0 0 1 1 1 1 1 1 ->  0
+      CHAR_1: get_seg = 8'h06;  // 0 0 0 0 0 1 1 0 ->  1
+      CHAR_2: get_seg = 8'h5B;  // 0 1 0 1 1 0 1 1 ->  2
+      CHAR_3: get_seg = 8'h4F;  // 0 1 0 0 1 1 1 1 ->  3
+      CHAR_4: get_seg = 8'h66;  // 0 1 1 0 0 1 1 0 ->  4
+      CHAR_5: get_seg = 8'h6D;  // 0 1 1 0 1 1 0 1 ->  5
+      CHAR_6: get_seg = 8'h7D;  // 0 1 1 1 1 1 0 1 ->  6
+      CHAR_7: get_seg = 8'h07;  // 0 0 0 0 0 1 1 7 ->  7
+      CHAR_8: get_seg = 8'h7F;  // 0 1 1 1 1 1 1 1 ->  8
+      CHAR_9: get_seg = 8'h6F;  // 0 1 1 0 1 1 1 1 ->  9
+      CHAR_A: get_seg = 8'h77;  // 0 1 1 1 0 1 1 7 ->  A (或者 8'h5F 显示 a)
+      CHAR_B: get_seg = 8'h7C;  // 0 1 1 1 1 1 0 0 ->  b
+      CHAR_C: get_seg = 8'h39;  // 0 0 1 1 1 0 0 1 ->  C
+      CHAR_D: get_seg = 8'h5E;  // 0 1 0 1 1 1 1 0 ->  d
+      CHAR_E: get_seg = 8'h79;  // 0 1 1 1 1 0 0 1 ->  E
+      CHAR_F: get_seg = 8'h71;  // 0 1 1 1 0 0 0 1 ->  F
+      CHAR_T: get_seg = 8'h78;  // t
+      CHAR_J: get_seg = 8'h1E;  // J
+      CHAR_R: get_seg = 8'h50;  // r
+      CHAR_H: get_seg = 8'h76;  // H
+      CHAR_P: get_seg = 8'h73;  // P
+      CHAR_L: get_seg = 8'h38;  // L
+      CHAR_U: get_seg = 8'h3E;  // U
+      CHAR_S: get_seg = 8'h6D;  // S
+      CHAR_N: get_seg = 8'h54;  // n
+      CHAR_DASH: get_seg = 8'h40;  // -
+      CHAR_UNDERSCORE: get_seg = 8'h08;  // _
       CHAR_BLK: get_seg = 8'h00;  // 空白
-      default:  get_seg = 8'h00;  // 全灭
+      default: get_seg = 8'h00;  // 全灭
     endcase
   endfunction
 

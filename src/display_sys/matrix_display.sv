@@ -31,6 +31,13 @@ module matrix_display (
     input wire [7:0] rx_data,   // UART 接收
     input wire       rx_done,
 
+    // --- 外部调用接口 (Slave Mode) ---
+    input  wire                 ext_en,   // 外部使能
+    input  wire [          1:0] ext_cmd,  // 1: Summary, 2: Detail
+    input  wire [ROW_IDX_W-1:0] ext_m,
+    input  wire [COL_IDX_W-1:0] ext_n,
+    output reg                  ext_done,
+
     // --- 存储读取接口 ---
     output reg           [MAT_ID_W-1:0] rd_id,
     input  wire matrix_t                rd_data, // 组合逻辑读取
@@ -112,13 +119,14 @@ module matrix_display (
   reg [COL_IDX_W-1:0] cur_c;  // 列游标
 
   // 命令缓存
-  reg [7:0] cmd_m_ascii, cmd_n_ascii;
+  reg [7:0] cmd_m_raw, cmd_n_raw;
   logic [ROW_IDX_W-1:0] cmd_m_val;
   logic [COL_IDX_W-1:0] cmd_n_val;
 
-  // 辅助计算
-  assign cmd_m_val = cmd_m_ascii - 8'h30;
-  assign cmd_n_val = cmd_n_ascii - 8'h30;
+  // 辅助计算 (Raw Hex Mode)
+  // 直接截取低位，不再减 0x30
+  assign cmd_m_val = cmd_m_raw[ROW_IDX_W-1:0];
+  assign cmd_n_val = cmd_n_raw[COL_IDX_W-1:0];
 
   // 从索引反推 M, N (用于 Summary 打印)
   // idx = (m-1)*5 + (n-1)
@@ -152,9 +160,22 @@ module matrix_display (
       sender_id <= 0;
       sender_is_last_col <= 0;
       display_done <= 0;
+      ext_done <= 0;
 
       case (state)
-        IDLE: if (start_en) state <= SUM_HEAD;
+        IDLE: begin
+          if (start_en) state <= SUM_HEAD;
+          else if (ext_en) begin
+            if (ext_cmd == 1) begin
+              state <= SUM_HEAD;
+              scan_idx <= 0;
+            end else if (ext_cmd == 2) begin
+              // Calculate Index from ext_m/n
+              scan_idx <= (ext_m - 1) * MAX_COLS + (ext_n - 1);
+              state <= DET_CALC_BASE;
+            end
+          end
+        end
 
         EXIT_WAIT: if (!start_en) state <= IDLE;
 
@@ -222,7 +243,12 @@ module matrix_display (
         SUM_END_GAP: begin
           sender_start <= 1;
           sender_newline_only <= 1;  // 表格后空一行
-          state <= WAIT_INPUT_M;
+          if (ext_en) begin
+            ext_done <= 1;
+            state <= IDLE;
+          end else begin
+            state <= WAIT_INPUT_M;
+          end
         end
 
         // ======================================================
@@ -233,21 +259,21 @@ module matrix_display (
             display_done <= 1;  // 退出 Display 模式
             state <= EXIT_WAIT;
           end else if (rx_done) begin
-            cmd_m_ascii <= rx_data;
+            cmd_m_raw <= rx_data;
             state <= WAIT_INPUT_N;
           end
         end
 
         WAIT_INPUT_N: begin
           if (rx_done) begin
-            cmd_n_ascii <= rx_data;
+            cmd_n_raw <= rx_data;
             state <= PARSE_CMD;
           end
         end
 
         PARSE_CMD: begin
-          // 如果输入 "00" (ASCII 0x30)，重新显示统计
-          if (cmd_m_ascii == 8'h30 && cmd_n_ascii == 8'h30) begin
+          // 如果输入 "00" (Hex 0x00)，重新显示统计
+          if (cmd_m_raw == 8'h00 && cmd_n_raw == 8'h00) begin
             state <= SUM_HEAD;
           end  // 校验数字范围 1~5
           else if (cmd_m_val >= 1 && cmd_m_val <= MAX_ROWS && 
@@ -270,8 +296,14 @@ module matrix_display (
           rd_id <= scan_idx * PHYSICAL_MAX_PER_DIM;
 
           // 如果该类型没有矩阵，直接回去
-          if (type_valid_cnt[scan_idx] == 0) state <= WAIT_INPUT_M;
-          else state <= DET_READ_RAM;
+          if (type_valid_cnt[scan_idx] == 0) begin
+            if (ext_en) begin
+              ext_done <= 1;
+              state <= IDLE;
+            end else begin
+              state <= WAIT_INPUT_M;
+            end
+          end else state <= DET_READ_RAM;
         end
 
         DET_READ_RAM: begin
@@ -343,7 +375,12 @@ module matrix_display (
               state <= DET_READ_RAM;
             end else begin
               // 全部打印完，回等待命令
-              state <= WAIT_INPUT_M;
+              if (ext_en) begin
+                ext_done <= 1;
+                state <= IDLE;
+              end else begin
+                state <= WAIT_INPUT_M;
+              end
             end
           end
         end

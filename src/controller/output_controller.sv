@@ -134,10 +134,22 @@ module output_controller (
       // Mode 3: Calculation Result (Print Result)
       // --------------------------------------------------------
       STATE_CALC: begin
-        mux_sender_start    = res_sender_start;
-        mux_sender_data     = res_sender_data;
-        mux_sender_last_col = res_sender_last_col;
-        mux_sender_newline  = res_sender_newline;
+        // Priority: Display (Slave Mode) > Result Printer
+        if (disp_sender_start) begin
+          mux_sender_start    = disp_sender_start;
+          mux_sender_data     = disp_sender_data;
+          mux_sender_last_col = disp_sender_last_col;
+          mux_sender_newline  = disp_sender_newline;
+          mux_sender_id       = disp_sender_id;
+          mux_sender_sum_head = disp_sender_sum_head;
+          mux_sender_sum_elem = disp_sender_sum_elem;
+          mux_rd_id_A         = disp_rd_id;
+        end else begin
+          mux_sender_start    = res_sender_start;
+          mux_sender_data     = res_sender_data;
+          mux_sender_last_col = res_sender_last_col;
+          mux_sender_newline  = res_sender_newline;
+        end
       end
 
       default: ;

@@ -215,7 +215,7 @@ module matrix_alu (
                   result_matrix.cols <= 10;
                   limit_i <= 8;
                   limit_j <= 10;
-                  limit_k <= 0;  // Convolution uses fixed loops
+                  limit_k <= 0;  // Reset k for convolution loop
                   state <= ALU_EXEC;
                 end
               end
@@ -305,34 +305,44 @@ module matrix_alu (
             end
 
             // --- Complex Operation: Convolution ---
-            // For simplicity, we can keep convolution combinational per pixel (it's only 3x3=9 ops),
-            // or serialize it if needed. 9 ops is much smaller than 12x12=144 parallel ops.
-            // Let's keep it simple (combinational logic inside the state) for now, 
-            // as MatMul was the main offender.
+            // Serialized implementation to fix timing violation (WNS -11.6ns)
+            // Instead of 9 parallel MACs, we do 1 MAC per cycle.
             OP_CONV: begin
-              // Using blocking assignment logic variable for cleaner code,
-              // or just write the sum expression.
-              // Since `img_data` and `matrix_B` are small, 9 muls is usually fine.
-              // If this still fails timing, we can serialize this too.
+              // Calculate current kernel coordinates (kr, kc) from cnt_k (0..8)
+              logic [1:0] kr, kc;
+              kr = cnt_k / 3;
+              kc = cnt_k % 3;
 
-              logic signed [23:0] conv_sum_temp;
-              conv_sum_temp = 0;
-              for (int r = 0; r < 3; r++) begin
-                for (int c = 0; c < 3; c++) begin
-                  conv_sum_temp += 24'(signed'({4'b0, img_data[(cnt_i + r) * 12 + (cnt_j + c)]})) * 24'(signed'(matrix_B.cells[r][c]));
-                end
+              // Accumulate: sum += Image[i+r][j+c] * Kernel[r][c]
+              // Note: img_data is 1D array, index = (i+r)*12 + (j+c)
+              accum <= accum + 
+                  (24'(signed'({4'b0, img_data[(cnt_i + kr) * 12 + (cnt_j + kc)]})) * 
+                   24'(signed'(matrix_B.cells[kr][kc])));
+
+              if (cnt_k == 8) begin
+                // Last pixel of the 3x3 window
+                // Write result with saturation
+                result_matrix.cells[cnt_i][cnt_j] <= saturate(
+                    accum + 
+                    (24'(signed'({4'b0, img_data[(cnt_i + kr) * 12 + (cnt_j + kc)]})) * 
+                     24'(signed'(matrix_B.cells[kr][kc])))
+                );
+
+                accum <= 0;  // Reset for next window
+                cnt_k <= 0;
+
+                // Loop Logic (8x10 output)
+                if (cnt_j == limit_j - 1) begin
+                  cnt_j <= 0;
+                  if (cnt_i == limit_i - 1) begin
+                    result_matrix.is_valid <= 1;
+                    state <= ALU_DONE;
+                  end else cnt_i <= cnt_i + 1;
+                end else cnt_j <= cnt_j + 1;
+
+              end else begin
+                cnt_k <= cnt_k + 1;
               end
-
-              result_matrix.cells[cnt_i][cnt_j] <= saturate(conv_sum_temp);
-
-              // Loop Logic (8x10 output)
-              if (cnt_j == limit_j - 1) begin
-                cnt_j <= 0;
-                if (cnt_i == limit_i - 1) begin
-                  result_matrix.is_valid <= 1;
-                  state <= ALU_DONE;
-                end else cnt_i <= cnt_i + 1;
-              end else cnt_j <= cnt_j + 1;
             end
 
             default: state <= ALU_DONE;

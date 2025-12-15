@@ -143,6 +143,8 @@ package project_pkg;
   localparam code_t CHAR_U = 5'd22;  // U
   localparam code_t CHAR_S = 5'd23;  // S
   localparam code_t CHAR_N = 5'd24;  // n
+  localparam code_t CHAR_DASH = 5'd25;  // -
+  localparam code_t CHAR_UNDERSCORE = 5'd26;  // _
   localparam code_t CHAR_BLK = 5'd31;  // Blank (黑屏)
 
 endpackage

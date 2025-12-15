@@ -54,7 +54,9 @@ module matrix_manage_sys (
 );
 
   // Internal Storage
-  (* ram_style = "block" *) matrix_t storage[0:MAT_TOTAL_SLOTS-1];
+  // Removed (* ram_style = "distributed" *) to allow Block RAM inference
+  // and avoid massive LUT usage which slows down synthesis.
+  matrix_t storage[0:MAT_TOTAL_SLOTS-1];
 
   // Pointers & Limits
   logic [PTR_W-1:0] active_limit = DEFAULT_LIMIT;
@@ -76,15 +78,11 @@ module matrix_manage_sys (
   assign calc_target = calc_base + calc_ptr;
 
   // --- Read Logic ---
+  // Changed to synchronous read to allow Block RAM inference.
+  // This adds 1 cycle latency, but significantly improves synthesis speed and timing.
   always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      rd_data_A <= '0;
-      rd_data_B <= '0;
-    end else begin
-      // 这里不要加 valid 判断，直接读地址，让综合器更容易识别 BRAM
-      rd_data_A <= storage[rd_id_A];
-      rd_data_B <= storage[rd_id_B];
-    end
+    rd_data_A <= storage[rd_id_A];
+    rd_data_B <= storage[rd_id_B];
   end
 
   // --- Write Logic ---

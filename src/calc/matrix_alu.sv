@@ -36,10 +36,9 @@ module matrix_alu (
     input matrix_element_t scalar_val,
 
     // --- Output Interface ---
-    output logic           done,
-    output matrix_t        result_matrix,
-    output logic           error_flag,
-    output logic    [31:0] cycle_cnt,
+    output logic        done,
+    output logic        error_flag,
+    output logic [31:0] cycle_cnt,
 
     // --- Streaming Interface (For Convolution) ---
     output logic               stream_valid,
@@ -231,12 +230,12 @@ module matrix_alu (
     img_data[119] = 4'd7;
   end
 
-  // Helper function for saturation
-  function automatic matrix_element_t saturate(input logic signed [23:0] val);
-    if (val > 24'sd127) return 8'sd127;
-    else if (val < -24'sd128) return -8'sd128;
-    else return val[7:0];
-  endfunction
+  // Helper function for saturation (Removed as per request)
+  // function automatic matrix_element_t saturate(input logic signed [23:0] val);
+  //   if (val > 24'sd127) return 8'sd127;
+  //   else if (val < -24'sd128) return -8'sd128;
+  //   else return val[7:0];
+  // endfunction
 
   // --- Combinational Logic for Convolution Stream ---
   // REMOVED: Combinational loop caused severe timing violation.
@@ -248,7 +247,8 @@ module matrix_alu (
       state            <= ALU_IDLE;
       done             <= 0;
       error_flag       <= 0;
-      result_matrix    <= '0;
+      // result_matrix    <= '0; // Removed
+
       cnt_i            <= 0;
       cnt_j            <= 0;
       cnt_k            <= 0;
@@ -266,22 +266,22 @@ module matrix_alu (
         ALU_IDLE: begin
           done <= 0;
           if (start) begin
-            error_flag             <= 0;
-            perf_cnt               <= 0;
-            result_matrix.is_valid <= 0;
+            error_flag       <= 0;
+            perf_cnt         <= 0;
+            // result_matrix.is_valid <= 0; // Removed
 
-            cnt_i                  <= 0;
-            cnt_j                  <= 0;
-            cnt_k                  <= 0;
-            accum                  <= 0;  // Clear accumulator
+            cnt_i            <= 0;
+            cnt_j            <= 0;
+            cnt_k            <= 0;
+            accum            <= 0;  // Clear accumulator
 
             // Reset Pipeline
-            pipe_valid             <= 0;
-            op_a_reg               <= 0;
-            op_b_reg               <= 0;
+            pipe_valid       <= 0;
+            op_a_reg         <= 0;
+            op_b_reg         <= 0;
 
             // Reset Stream Signals
-            stream_valid_reg       <= 0;
+            stream_valid_reg <= 0;
 
             case (op_code)
               OP_ADD: begin
@@ -289,31 +289,31 @@ module matrix_alu (
                   error_flag <= 1;
                   state <= ALU_DONE;
                 end else begin
-                  result_matrix.rows <= matrix_A.rows;
-                  result_matrix.cols <= matrix_A.cols;
+                  // result_matrix.rows <= matrix_A.rows; // Removed
+                  // result_matrix.cols <= matrix_A.cols; // Removed
                   limit_i <= matrix_A.rows;
                   limit_j <= matrix_A.cols;
                   limit_k <= 1;  // Not used loop
-                  state <= ALU_EXEC;
+                  state   <= ALU_EXEC;
                 end
               end
 
               OP_SCALAR_MUL: begin
-                result_matrix.rows <= matrix_A.rows;
-                result_matrix.cols <= matrix_A.cols;
+                // result_matrix.rows <= matrix_A.rows; // Removed
+                // result_matrix.cols <= matrix_A.cols; // Removed
                 limit_i <= matrix_A.rows;
                 limit_j <= matrix_A.cols;
                 limit_k <= 1;
-                state <= ALU_EXEC;
+                state   <= ALU_EXEC;
               end
 
               OP_TRANSPOSE: begin
-                result_matrix.rows <= matrix_A.cols;
-                result_matrix.cols <= matrix_A.rows;
+                // result_matrix.rows <= matrix_A.cols; // Removed
+                // result_matrix.cols <= matrix_A.rows; // Removed
                 limit_i <= matrix_A.cols;
                 limit_j <= matrix_A.rows;
                 limit_k <= 1;
-                state <= ALU_EXEC;
+                state   <= ALU_EXEC;
               end
 
               OP_MAT_MUL: begin
@@ -321,12 +321,12 @@ module matrix_alu (
                   error_flag <= 1;
                   state <= ALU_DONE;
                 end else begin
-                  result_matrix.rows <= matrix_A.rows;
-                  result_matrix.cols <= matrix_B.cols;
+                  // result_matrix.rows <= matrix_A.rows; // Removed
+                  // result_matrix.cols <= matrix_B.cols; // Removed
                   limit_i <= matrix_A.rows;
                   limit_j <= matrix_B.cols;
                   limit_k <= matrix_A.cols;  // The common dimension
-                  state <= ALU_EXEC;
+                  state   <= ALU_EXEC;
                 end
               end
 
@@ -335,12 +335,12 @@ module matrix_alu (
                   error_flag <= 1;
                   state <= ALU_DONE;
                 end else begin
-                  result_matrix.rows <= 8;
-                  result_matrix.cols <= 10;
+                  // result_matrix.rows <= 8; // Removed
+                  // result_matrix.cols <= 10; // Removed
                   limit_i <= 8;
                   limit_j <= 10;
                   limit_k <= 9;  // Iterate 0..8 for 3x3 kernel
-                  state <= ALU_EXEC;
+                  state   <= ALU_EXEC;
                 end
               end
 
@@ -365,8 +365,8 @@ module matrix_alu (
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
-                // Write to storage (saturated)
-                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg + op_b_reg);
+                // Write to storage (saturated) - Removed
+                // result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg + op_b_reg);
 
                 // Write to stream (full precision)
                 stream_data_reg <= 32'(op_a_reg + op_b_reg);
@@ -385,8 +385,8 @@ module matrix_alu (
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
-                // Write to storage (saturated)
-                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg * 24'(signed'(scalar_val)));
+                // Write to storage (saturated) - Removed
+                // result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg * 24'(signed'(scalar_val)));
 
                 // Write to stream (full precision)
                 stream_data_reg <= 32'(op_a_reg * 24'(signed'(scalar_val)));
@@ -404,8 +404,8 @@ module matrix_alu (
                 op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_j][cnt_i]));  // Note indices
                 pipe_valid <= 1;
               end else begin
-                // Write to storage
-                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg);
+                // Write to storage - Removed
+                // result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg);
 
                 // Write to stream
                 stream_data_reg <= 32'(op_a_reg);
@@ -421,8 +421,8 @@ module matrix_alu (
             OP_MAT_MUL: begin
               if (cnt_k == limit_k) begin
                 // Writeback Phase (Accumulation Complete)
-                // Write to storage (saturated)
-                result_matrix.cells[cnt_i][cnt_j] <= saturate(accum);
+                // Write to storage (saturated) - Removed
+                // result_matrix.cells[cnt_i][cnt_j] <= saturate(accum);
 
                 // Write to stream (full precision)
                 stream_data_reg <= 32'(accum);
@@ -500,7 +500,7 @@ module matrix_alu (
               cnt_j <= 0;
               if (cnt_i == limit_i - 1) begin
                 // Finished entire operation
-                result_matrix.is_valid <= 1;  // Mark result as valid
+                // result_matrix.is_valid <= 1;  // Removed
                 state <= ALU_DONE;
               end else begin
                 cnt_i <= cnt_i + 1;

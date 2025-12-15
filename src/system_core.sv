@@ -144,7 +144,7 @@ module system_core (
 
   // 5. Matrix ALU
   logic                   alu_calc_done;
-  matrix_t                alu_result_matrix;
+  // matrix_t                alu_result_matrix; // Removed
   logic                   alu_err_flag;
   logic            [31:0] alu_cycle_cnt;  // Bonus 性能计数
   // ALU Stream
@@ -406,7 +406,7 @@ module system_core (
       .scalar_val(sys_calc_scalar_val),  // Scalar from Calc Sys (Converted)
 
       .done(alu_calc_done),
-      .result_matrix(alu_result_matrix),
+      // .result_matrix(alu_result_matrix), // Removed
       .error_flag(alu_err_flag),
       .cycle_cnt(alu_cycle_cnt),
 
@@ -417,22 +417,27 @@ module system_core (
       .stream_ready(alu_stream_ready)
   );
 
-  // --- Result Printer ---
-  matrix_result_printer u_res_printer (
-      .clk(clk),
-      .rst_n(rst_n),
-      .start(sys_calc_print_start),
-      .result_matrix(alu_result_matrix),
-      // Sender Interface
-      .sender_data(res_snd_data_printer),
-      .sender_start(res_snd_start_printer),
-      .sender_is_last_col(res_snd_last_printer),
-      .sender_newline_only(res_snd_nl_printer),
-      .sender_done(sender_done),
-      .sender_ready(uart_sender_ready),
-
-      .printer_done(res_printer_done)
-  );
+  // --- Result Printer (Removed) ---
+  // matrix_result_printer u_res_printer (
+  //     .clk(clk),
+  //     .rst_n(rst_n),
+  //     .start(sys_calc_print_start),
+  //     .result_matrix(alu_result_matrix),
+  //     // Sender Interface
+  //     .sender_data(res_snd_data_printer),
+  //     .sender_start(res_snd_start_printer),
+  //     .sender_is_last_col(res_snd_last_printer),
+  //     .sender_newline_only(res_snd_nl_printer),
+  //     .sender_done(sender_done),
+  //     .sender_ready(uart_sender_ready),
+  //
+  //     .printer_done(res_printer_done)
+  // );
+  assign res_printer_done = 1'b1;  // Always done if not used
+  assign res_snd_start_printer = 0;
+  assign res_snd_data_printer = 0;
+  assign res_snd_last_printer = 0;
+  assign res_snd_nl_printer = 0;
 
 
   //==========================================================================

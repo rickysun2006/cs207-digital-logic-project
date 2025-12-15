@@ -44,18 +44,40 @@ module lfsr_core (
 
   // rand_val = cfg_min + (lfsr_raw % (cfg_max - cfg_min + 1))
 
-  wire signed [8:0] range_len;
-  assign range_len = $signed(cfg_max) - $signed(cfg_min) + 9'sd1;
+  // Pipeline Stage 0: Calculate Range (Pre-calculate to break path from inputs)
+  reg [8:0] range_len_reg;
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) range_len_reg <= 9'd1;
+    else
+      range_len_reg <= ($signed(
+          cfg_max
+      ) >= $signed(
+          cfg_min
+      )) ? ($signed(
+          cfg_max
+      ) - $signed(
+          cfg_min
+      ) + 9'sd1) : 9'd1;
+  end
 
-  wire [7:0] offset;
+  // Pipeline Stage 1: Calculate Offset using Multiplication
+  // Replaces modulo (%) with (val * range) >> 8 for speed
+  reg [7:0] offset_reg;
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      offset_reg <= 0;
+    end else if (en) begin
+      // (lfsr_raw * range_len_reg) / 256
+      offset_reg <= (lfsr_raw * range_len_reg) >> 8;
+    end
+  end
 
-  assign offset = (range_len > 0) ? (lfsr_raw % unsigned'(range_len)) : 8'd0;
-
+  // Pipeline Stage 2: Final Output
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       rand_val <= 8'd0;
     end else if (en) begin
-      rand_val <= cfg_min + offset;
+      rand_val <= cfg_min + offset_reg;
     end
   end
 

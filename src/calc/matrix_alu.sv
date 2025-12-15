@@ -52,25 +52,40 @@ module matrix_alu (
   typedef enum logic [2:0] {
     ALU_IDLE,
     ALU_EXEC,
+    ALU_WAIT_TX,
     ALU_DONE
   } alu_state_t;
-  alu_state_t state;
+  alu_state_t             state;
 
   // Counters
-  logic [3:0] cnt_i;  // Row
-  logic [3:0] cnt_j;  // Col
-  logic [3:0] cnt_k;  // Dot product accumulator iterator
+  logic            [ 3:0] cnt_i;  // Row
+  logic            [ 3:0] cnt_j;  // Col
+  logic            [ 3:0] cnt_k;  // Dot product accumulator iterator
 
-  logic [3:0] limit_i;
-  logic [3:0] limit_j;
-  logic [3:0] limit_k;  // For dot product loop
+  logic            [ 3:0] limit_i;
+  logic            [ 3:0] limit_j;
+  logic            [ 3:0] limit_k;  // For dot product loop
 
   // Cycle Counter
-  logic [31:0] perf_cnt;
+  logic            [31:0] perf_cnt;
 
   // Accumulators (Width expanded to prevent overflow)
-  logic signed [23:0] accum;
-  logic signed [23:0] current_prod;
+  logic signed     [23:0] accum;
+  logic signed     [23:0] current_prod;
+
+  // --- Pipeline Registers (Timing Fix) ---
+  logic signed     [23:0] op_a_reg;
+  logic signed     [23:0] op_b_reg;
+  logic                   pipe_valid;  // 1: Execute Stage, 0: Fetch Stage
+
+  // Output Registers for Stream
+  matrix_element_t        stream_data_reg;
+  logic                   stream_valid_reg;
+  logic                   stream_last_col_reg;
+
+  assign stream_data = stream_data_reg;
+  assign stream_valid = stream_valid_reg;
+  assign stream_last_col = stream_last_col_reg;
 
   // --- Hardcoded Image Data (Keep your original ROM data) ---
   logic [3:0] img_data[0:119];
@@ -224,37 +239,25 @@ module matrix_alu (
   endfunction
 
   // --- Combinational Logic for Convolution Stream ---
-  logic signed [23:0] conv_sum_comb;
-  always_comb begin
-    conv_sum_comb = 0;
-    if (state == ALU_EXEC && op_code == OP_CONV) begin
-      for (int r = 0; r < 3; r++) begin
-        for (int c = 0; c < 3; c++) begin
-          conv_sum_comb += 24'(signed'({4'b0, img_data[(cnt_i + r) * 12 + (cnt_j + c)]})) * 24'(signed'(matrix_B.cells[r][c]));
-        end
-      end
-    end
-  end
-
-  assign stream_data = saturate(conv_sum_comb);
-  assign stream_last_col = (cnt_j == limit_j - 1);
+  // REMOVED: Combinational loop caused severe timing violation.
+  // Replaced with sequential accumulation in ALU_EXEC.
 
   // --- Sequential Logic ---
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      state         <= ALU_IDLE;
-      done          <= 0;
-      error_flag    <= 0;
-      result_matrix <= '0;
-      cnt_i         <= 0;
-      cnt_j         <= 0;
-      cnt_k         <= 0;
-      limit_i       <= 0;
-      limit_j       <= 0;
-      limit_k       <= 0;
-      perf_cnt      <= 0;
-      accum         <= 0;
-      stream_valid  <= 0;
+      state            <= ALU_IDLE;
+      done             <= 0;
+      error_flag       <= 0;
+      result_matrix    <= '0;
+      cnt_i            <= 0;
+      cnt_j            <= 0;
+      cnt_k            <= 0;
+      limit_i          <= 0;
+      limit_j          <= 0;
+      limit_k          <= 0;
+      perf_cnt         <= 0;
+      accum            <= 0;
+      stream_valid_reg <= 0;
     end else begin
       case (state)
         // ------------------------------------------------------------
@@ -272,8 +275,13 @@ module matrix_alu (
             cnt_k                  <= 0;
             accum                  <= 0;  // Clear accumulator
 
+            // Reset Pipeline
+            pipe_valid             <= 0;
+            op_a_reg               <= 0;
+            op_b_reg               <= 0;
+
             // Reset Stream Signals
-            stream_valid           <= 0;
+            stream_valid_reg       <= 0;
 
             case (op_code)
               OP_ADD: begin
@@ -331,7 +339,7 @@ module matrix_alu (
                   result_matrix.cols <= 10;
                   limit_i <= 8;
                   limit_j <= 10;
-                  limit_k <= 0;  // Convolution uses fixed loops
+                  limit_k <= 9;  // Iterate 0..8 for 3x3 kernel
                   state <= ALU_EXEC;
                 end
               end
@@ -342,71 +350,25 @@ module matrix_alu (
         end
 
         // ------------------------------------------------------------
-        // 2. EXECUTION (Serialized)
+        // 2. EXECUTION (Pipelined)
         // ------------------------------------------------------------
         ALU_EXEC: begin
           perf_cnt <= perf_cnt + 1;
 
           case (op_code)
-            // --- Simple Operations (1 cycle per element) ---
+            // --- Simple Operations (2-Stage Pipeline: Fetch -> Write) ---
             OP_ADD: begin
-              result_matrix.cells[cnt_i][cnt_j] <= saturate(
-                  24'(signed'(matrix_A.cells[cnt_i][cnt_j])) + 
-                    24'(signed'(matrix_B.cells[cnt_i][cnt_j]))
-              );
-              // Loop Logic (i, j)
-              if (cnt_j == limit_j - 1) begin
-                cnt_j <= 0;
-                if (cnt_i == limit_i - 1) begin
-                  result_matrix.is_valid <= 1;
-                  state <= ALU_DONE;
-                end else cnt_i <= cnt_i + 1;
-              end else cnt_j <= cnt_j + 1;
-            end
+              if (!pipe_valid) begin
+                // Stage 1: Fetch
+                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_j]));
+                op_b_reg   <= 24'(signed'(matrix_B.cells[cnt_i][cnt_j]));
+                pipe_valid <= 1;
+              end else begin
+                // Stage 2: Execute & Write
+                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg + op_b_reg);
+                pipe_valid <= 0;  // Back to fetch
 
-            OP_SCALAR_MUL: begin
-              result_matrix.cells[cnt_i][cnt_j] <= saturate(
-                  24'(signed'(matrix_A.cells[cnt_i][cnt_j])) * 24'(signed'(scalar_val))
-              );
-              // Loop Logic (same as ADD)
-              if (cnt_j == limit_j - 1) begin
-                cnt_j <= 0;
-                if (cnt_i == limit_i - 1) begin
-                  result_matrix.is_valid <= 1;
-                  state <= ALU_DONE;
-                end else cnt_i <= cnt_i + 1;
-              end else cnt_j <= cnt_j + 1;
-            end
-
-            OP_TRANSPOSE: begin
-              result_matrix.cells[cnt_i][cnt_j] <= matrix_A.cells[cnt_j][cnt_i];
-              // Loop Logic
-              if (cnt_j == limit_j - 1) begin
-                cnt_j <= 0;
-                if (cnt_i == limit_i - 1) begin
-                  result_matrix.is_valid <= 1;
-                  state <= ALU_DONE;
-                end else cnt_i <= cnt_i + 1;
-              end else cnt_j <= cnt_j + 1;
-            end
-
-            // --- Complex Operation: Matrix Mul (Serialized Loop) ---
-            OP_MAT_MUL: begin
-              // Accumulate: sum += A[i][k] * B[k][j]
-              // Note: We use one extra cycle per element to write back, or optimize inside loop.
-              // Here: Accumulate in 'accum'. When k reaches limit, write and reset.
-
-              accum <= accum + (24'(signed'(matrix_A.cells[cnt_i][cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])));
-
-              if (cnt_k == limit_k - 1) begin
-                // Dot product finished for this cell
-                result_matrix.cells[cnt_i][cnt_j] <= saturate(
-                    accum + (24'(signed'(matrix_A.cells[cnt_i][cnt_k])) * 24'(signed'(matrix_B.cells[cnt_k][cnt_j])))
-                );
-                accum <= 0;  // Reset for next cell
-                cnt_k <= 0;
-
-                // Move to next cell (j, then i)
+                // Loop Logic
                 if (cnt_j == limit_j - 1) begin
                   cnt_j <= 0;
                   if (cnt_i == limit_i - 1) begin
@@ -414,38 +376,142 @@ module matrix_alu (
                     state <= ALU_DONE;
                   end else cnt_i <= cnt_i + 1;
                 end else cnt_j <= cnt_j + 1;
-
-              end else begin
-                cnt_k <= cnt_k + 1;
               end
             end
 
-            // --- Complex Operation: Convolution (Streaming) ---
-            OP_CONV: begin
-              // Data is driven by combinational logic (conv_sum_comb -> stream_data)
-              // We just manage the valid/ready handshake and counters here.
+            OP_SCALAR_MUL: begin
+              if (!pipe_valid) begin
+                // Stage 1: Fetch
+                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_j]));
+                pipe_valid <= 1;
+              end else begin
+                // Stage 2: Execute & Write
+                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg * 24'(signed'(scalar_val)));
+                pipe_valid <= 0;
 
-              stream_valid <= 1;
-
-              if (stream_valid && stream_ready) begin
-                // Handshake successful, move to next pixel
+                // Loop Logic
                 if (cnt_j == limit_j - 1) begin
                   cnt_j <= 0;
                   if (cnt_i == limit_i - 1) begin
-                    // Finished entire image
-                    stream_valid <= 0;
+                    result_matrix.is_valid <= 1;
                     state <= ALU_DONE;
-                  end else begin
-                    cnt_i <= cnt_i + 1;
-                  end
+                  end else cnt_i <= cnt_i + 1;
+                end else cnt_j <= cnt_j + 1;
+              end
+            end
+
+            OP_TRANSPOSE: begin
+              // Transpose is just a move, but we pipeline it to be safe and consistent
+              if (!pipe_valid) begin
+                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_j][cnt_i]));  // Note indices
+                pipe_valid <= 1;
+              end else begin
+                result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg);
+                pipe_valid <= 0;
+
+                // Loop Logic
+                if (cnt_j == limit_j - 1) begin
+                  cnt_j <= 0;
+                  if (cnt_i == limit_i - 1) begin
+                    result_matrix.is_valid <= 1;
+                    state <= ALU_DONE;
+                  end else cnt_i <= cnt_i + 1;
+                end else cnt_j <= cnt_j + 1;
+              end
+            end
+
+            // --- Complex Operation: Matrix Mul (Pipelined Accumulation) ---
+            OP_MAT_MUL: begin
+              if (cnt_k == limit_k) begin
+                // Writeback Phase (Accumulation Complete)
+                result_matrix.cells[cnt_i][cnt_j] <= saturate(accum);
+                accum <= 0;
+                cnt_k <= 0;
+                pipe_valid <= 0;
+
+                // Move to next cell
+                if (cnt_j == limit_j - 1) begin
+                  cnt_j <= 0;
+                  if (cnt_i == limit_i - 1) begin
+                    result_matrix.is_valid <= 1;
+                    state <= ALU_DONE;
+                  end else cnt_i <= cnt_i + 1;
+                end else cnt_j <= cnt_j + 1;
+              end else begin
+                // Accumulation Phase
+                if (!pipe_valid) begin
+                  // Stage 1: Fetch
+                  op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_k]));
+                  op_b_reg   <= 24'(signed'(matrix_B.cells[cnt_k][cnt_j]));
+                  pipe_valid <= 1;
                 end else begin
-                  cnt_j <= cnt_j + 1;
+                  // Stage 2: Accumulate
+                  accum <= accum + (op_a_reg * op_b_reg);
+                  pipe_valid <= 0;
+                  cnt_k <= cnt_k + 1;
+                end
+              end
+            end
+
+            // --- Complex Operation: Convolution (Pipelined Streaming) ---
+            OP_CONV: begin
+              if (cnt_k == limit_k) begin
+                // Writeback Phase (Accumulation Complete)
+                stream_data_reg <= saturate(accum);
+                stream_last_col_reg <= (cnt_j == limit_j - 1);
+                stream_valid_reg <= 1;
+
+                accum <= 0;
+                cnt_k <= 0;
+                pipe_valid <= 0;
+
+                state <= ALU_WAIT_TX;
+              end else begin
+                // Accumulation Phase
+                if (!pipe_valid) begin
+                  // Stage 1: Fetch
+                  logic [3:0] r, c;
+                  r = cnt_k / 3;
+                  c = cnt_k % 3;
+                  op_a_reg   <= 24'(signed'({4'b0, img_data[(cnt_i+r)*12+(cnt_j+c)]}));
+                  op_b_reg   <= 24'(signed'(matrix_B.cells[r][c]));
+                  pipe_valid <= 1;
+                end else begin
+                  // Stage 2: Accumulate
+                  accum <= accum + (op_a_reg * op_b_reg);
+                  pipe_valid <= 0;
+                  cnt_k <= cnt_k + 1;
                 end
               end
             end
 
             default: state <= ALU_DONE;
           endcase
+        end
+
+        // ------------------------------------------------------------
+        // 2.5 WAIT_TX (Handshake)
+        // ------------------------------------------------------------
+        ALU_WAIT_TX: begin
+          if (stream_ready) begin
+            // Handshake complete
+            stream_valid_reg <= 0;  // Optional: Clear valid to be safe
+
+            // Increment Counters
+            if (cnt_j == limit_j - 1) begin
+              cnt_j <= 0;
+              if (cnt_i == limit_i - 1) begin
+                // Finished entire image
+                state <= ALU_DONE;
+              end else begin
+                cnt_i <= cnt_i + 1;
+                state <= ALU_EXEC;  // Back to calculate next
+              end
+            end else begin
+              cnt_j <= cnt_j + 1;
+              state <= ALU_EXEC;  // Back to calculate next
+            end
+          end
         end
 
         // ------------------------------------------------------------

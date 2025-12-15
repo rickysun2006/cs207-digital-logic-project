@@ -192,7 +192,7 @@ module system_core (
       .input_done(input_done),
       .gen_done(gen_done),
       .display_done(display_done),
-      .calc_done(calc_sys_done),
+      .calc_sys_done(calc_sys_done),
       .current_state(current_state)
       //.safe_reset_btn(fsm_safe_reset_btn) // Removed
   );

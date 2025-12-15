@@ -170,7 +170,10 @@ module matrix_calc_sys (
 
       case (state)
         IDLE: begin
-          if (start_en) state <= SELECT_OP;
+          if (start_en) begin
+            // Wait for button release before accepting new input
+            if (!btn_confirm) state <= SELECT_OP;
+          end
           seg_content <= {
             CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
           };
@@ -352,7 +355,11 @@ module matrix_calc_sys (
             err_timer <= 0;
             state <= ERROR_HOLD;
           end else if (alu_done) begin
-            state <= EXEC_PRINT;
+            if (op_reg == OP_CONV) begin
+              state <= DONE_WAIT;  // Skip printing (already streamed)
+            end else begin
+              state <= EXEC_PRINT;
+            end
           end
         end
 

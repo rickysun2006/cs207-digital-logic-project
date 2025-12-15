@@ -111,6 +111,31 @@ The system is controlled by a Main Menu state machine. Use **Switches** to selec
    - The result is calculated and stored as a new matrix.
    - Use **Mode 3 (Display)** to view the result.
 
+### 4.5 Mode 5: System Settings
+**Goal:** Configure system parameters (Error Timeout, Value Limits, Storage Limits).
+
+1. **Enter Mode:**
+   - Set **SW[3] = ON** (others OFF).
+   - Press **Confirm**.
+   - FPGA Display: `SEt`.
+
+2. **Select Parameter:**
+   - **SW[7] = ON**: Set Error Countdown Time (Default: 10s).
+   - **SW[6] = ON**: Set Matrix Element Max Value (Default: 9).
+   - **SW[5] = ON**: Set Matrix Element Min Value (Default: 0).
+   - **SW[4] = ON**: Set Storage Limit per Dimension (Default: 2 matrices).
+   - Press **Confirm** to enter parameter edit mode.
+
+3. **Edit Parameter:**
+   - Use **SW[7:0]** to set the value (binary/integer).
+     - For Max/Min Value, it supports signed 8-bit integers (2's complement).
+   - Display shows the current value (e.g., `E 10`, `H 9`, `L 0`).
+   - Press **Confirm** to save.
+   - Press **Back (Up Button)** to cancel/return.
+
+4. **Exit Settings:**
+   - Press **Back (Up Button)** in the main Settings menu (`SEt`) to return to IDLE.
+
 ## 5. Troubleshooting
 - **Client not connecting:** Check if the USB cable is plugged in and the correct port is selected. Close other terminal software.
 - **FPGA stuck:** Press **BTN_UP** to try to cancel the current operation. If that fails, press **BTN_RIGHT** (System Reset).

@@ -26,24 +26,32 @@ class InputMode(ft.Container):
         self.result_id_display = ft.Text("ID: --", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY)
 
         # Layout
-        left_panel = ft.Column([
-            ft.Text("Input Matrix", size=20, weight=ft.FontWeight.BOLD),
-            ft.Row([self.rows_input, ft.Text("x"), self.cols_input], alignment=ft.MainAxisAlignment.CENTER),
-            ft.Container(content=self.input_grid, padding=10, border=ft.border.all(1, ft.Colors.OUTLINE), border_radius=8),
-            ft.ElevatedButton("Send to FPGA", icon=ft.Icons.SEND, on_click=self.send_data)
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20)
+        left_panel = StyledCard(
+            title="Input Matrix", icon=ft.Icons.GRID_ON,
+            content=ft.Column([
+                ft.Row([self.rows_input, ft.Text("x"), self.cols_input], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Container(content=self.input_grid, padding=10, border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT), border_radius=8),
+                ft.ElevatedButton(
+                    "Send to FPGA", 
+                    icon=ft.Icons.SEND, 
+                    on_click=self.send_data,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.PRIMARY, color=ft.Colors.ON_PRIMARY)
+                )
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20)
+        )
 
-        right_panel = ft.Column([
-            ft.Text("Result from FPGA", size=20, weight=ft.FontWeight.BOLD),
-            self.result_id_display,
-            self.result_display
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20)
+        right_panel = StyledCard(
+            title="Result from FPGA", icon=ft.Icons.OUTPUT,
+            content=ft.Column([
+                self.result_id_display,
+                self.result_display
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20)
+        )
 
         self.content = ft.Row([
             ft.Container(content=left_panel, expand=True),
-            ft.VerticalDivider(),
             ft.Container(content=right_panel, expand=True)
-        ], expand=True)
+        ], expand=True, spacing=20)
 
     def update_grid_dims(self, e):
         try:

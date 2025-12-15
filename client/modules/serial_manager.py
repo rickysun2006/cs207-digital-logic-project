@@ -18,7 +18,11 @@ class SerialManager:
 
     def connect(self, port, baudrate):
         try:
-            self.ser = serial.Serial(port, baudrate, timeout=0.1)
+            if port.startswith("socket://"):
+                self.ser = serial.serial_for_url(port, baudrate=baudrate, timeout=0.1)
+            else:
+                self.ser = serial.Serial(port, baudrate, timeout=0.1)
+            
             self.is_connected = True
             self.stop_event.clear()
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)

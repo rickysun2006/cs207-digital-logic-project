@@ -25,20 +25,22 @@ class DisplayMode(ft.Container):
         self.stats_list = ft.ListView(expand=True, spacing=5)
         self.matrix_view = ft.ListView(expand=True, spacing=10, auto_scroll=True)
         
-        left_col = ft.Column([
-            ft.Row([
-                ft.Text("Statistics", size=16, weight=ft.FontWeight.BOLD),
-                ft.IconButton(ft.Icons.REFRESH, on_click=self.request_stats)
-            ]),
-            ft.Container(content=self.stats_list, expand=True, bgcolor=ft.Colors.SURFACE_VARIANT, border_radius=8, padding=5)
-        ], expand=1)
+        left_col = StyledCard(
+            title="Statistics", icon=ft.Icons.ANALYTICS,
+            expand=True,
+            content=ft.Column([
+                ft.ElevatedButton("Refresh Stats", icon=ft.Icons.REFRESH, on_click=self.request_stats, width=1000),
+                ft.Container(content=self.stats_list, expand=True, bgcolor="background", border_radius=8, padding=5)
+            ], expand=True)
+        )
         
-        right_col = ft.Column([
-            ft.Text("Matrices", size=16, weight=ft.FontWeight.BOLD),
-            ft.Container(content=self.matrix_view, expand=True, bgcolor=ft.Colors.SURFACE_VARIANT, border_radius=8, padding=10)
-        ], expand=2)
+        right_col = StyledCard(
+            title="Matrices", icon=ft.Icons.DATA_ARRAY,
+            expand=True,
+            content=ft.Container(content=self.matrix_view, expand=True, bgcolor="background", border_radius=8, padding=10)
+        )
 
-        self.content = ft.Row([left_col, ft.VerticalDivider(), right_col], expand=True)
+        self.content = ft.Row([left_col, right_col], expand=True, spacing=20)
 
     def request_stats(self, e=None):
         if self.serial.is_connected:

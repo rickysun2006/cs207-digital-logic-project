@@ -4,7 +4,7 @@ class StyledCard(ft.Container):
     """统一风格的卡片容器"""
     def __init__(self, content, title=None, icon=None, expand=False):
         super().__init__()
-        self.bgcolor = ft.Colors.SURFACE
+        self.bgcolor = "surface"
         self.border_radius = 12
         self.padding = 20
         self.expand = expand
@@ -43,7 +43,7 @@ class MatrixDisplay(ft.Column):
             ft.Container(
                 content=self.grid_container,
                 padding=10,
-                bgcolor=ft.Colors.SURFACE_VARIANT,
+                bgcolor="surfaceVariant",
                 border_radius=8,
                 alignment=ft.alignment.center
             )
@@ -76,13 +76,14 @@ class MatrixDisplay(ft.Column):
                             content=ft.Text(str(val), text_align=ft.TextAlign.CENTER, size=12),
                             width=40, height=30,
                             alignment=ft.alignment.center,
-                            bgcolor=ft.Colors.BACKGROUND,
+                            bgcolor="background",
                             border_radius=4
                         )
                     )
                 self.grid_container.controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER))
         
-        self.update()
+        if self.page:
+            self.update()
 
 class MatrixInputGrid(ft.Column):
     """用于输入的矩阵网格"""
@@ -118,7 +119,9 @@ class MatrixInputGrid(ft.Column):
                 row_controls.append(tf)
             self.inputs.append(row_inputs)
             self.grid_col.controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER))
-        self.update()
+        
+        if self.page:
+            self.update()
 
     def get_values(self):
         data = []

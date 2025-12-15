@@ -25,18 +25,28 @@ class GenMode(ft.Container):
         self.results_list = ft.ListView(expand=True, spacing=10, auto_scroll=True)
 
         self.content = ft.Column([
-            ft.Row([
-                ft.Text("Generate Matrices:", size=16, weight=ft.FontWeight.BOLD),
-                self.m_input,
-                ft.Text("x"),
-                self.n_input,
-                ft.Text("Count:"),
-                self.k_input,
-                ft.ElevatedButton("Generate", icon=ft.Icons.play_arrow, on_click=self.send_gen_cmd)
-            ], alignment=ft.MainAxisAlignment.CENTER),
-            ft.Divider(),
-            ft.Text("Generated Results:", size=14, color=ft.Colors.OUTLINE),
-            ft.Container(content=self.results_list, expand=True, bgcolor=ft.Colors.SURFACE_VARIANT, border_radius=8, padding=10)
+            StyledCard(
+                title="Generation Parameters", icon=ft.Icons.SETTINGS,
+                content=ft.Row([
+                    self.m_input,
+                    ft.Text("x"),
+                    self.n_input,
+                    ft.Text("Count:"),
+                    self.k_input,
+                    ft.ElevatedButton(
+                        "Generate", 
+                        icon=ft.Icons.PLAY_ARROW, 
+                        on_click=self.send_gen_cmd,
+                        style=ft.ButtonStyle(bgcolor=ft.Colors.PRIMARY, color=ft.Colors.ON_PRIMARY)
+                    )
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=20)
+            ),
+            ft.Container(height=10),
+            StyledCard(
+                title="Generated Results", icon=ft.Icons.LIST,
+                expand=True,
+                content=ft.Container(content=self.results_list, expand=True, bgcolor="background", border_radius=8, padding=10)
+            )
         ])
 
     def send_gen_cmd(self, e):
@@ -90,7 +100,7 @@ class GenMode(ft.Container):
                 ft.Text(f"Matrix ID: {mid}", weight=ft.FontWeight.BOLD),
                 ft.Text(text_block, font_family="Consolas", size=14)
             ]),
-            bgcolor=ft.Colors.SURFACE,
+            bgcolor="surface",
             padding=10,
             border_radius=5
         )

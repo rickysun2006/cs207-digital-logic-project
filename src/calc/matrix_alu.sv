@@ -69,12 +69,12 @@ module matrix_alu (
   logic        [31:0] perf_cnt;
 
   // Accumulators (Width expanded to prevent overflow)
-  logic signed [23:0] accum;
-  logic signed [23:0] current_prod;
+  logic signed [31:0] accum;
+  logic signed [31:0] current_prod;
 
   // --- Pipeline Registers (Timing Fix) ---
-  logic signed [23:0] op_a_reg;
-  logic signed [23:0] op_b_reg;
+  logic signed [31:0] op_a_reg;
+  logic signed [31:0] op_b_reg;
   logic               pipe_valid;  // 1: Execute Stage, 0: Fetch Stage
 
   // Output Registers for Stream
@@ -360,8 +360,8 @@ module matrix_alu (
             OP_ADD: begin
               if (!pipe_valid) begin
                 // Stage 1: Fetch
-                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_j]));
-                op_b_reg   <= 24'(signed'(matrix_B.cells[cnt_i][cnt_j]));
+                op_a_reg   <= 32'(signed'(matrix_A.cells[cnt_i][cnt_j]));
+                op_b_reg   <= 32'(signed'(matrix_B.cells[cnt_i][cnt_j]));
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
@@ -369,7 +369,7 @@ module matrix_alu (
                 // result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg + op_b_reg);
 
                 // Write to stream (full precision)
-                stream_data_reg <= 32'(op_a_reg + op_b_reg);
+                stream_data_reg <= op_a_reg + op_b_reg;
                 stream_last_col_reg <= (cnt_j == limit_j - 1);
                 stream_valid_reg <= 1;
 
@@ -381,7 +381,7 @@ module matrix_alu (
             OP_SCALAR_MUL: begin
               if (!pipe_valid) begin
                 // Stage 1: Fetch
-                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_j]));
+                op_a_reg   <= 32'(signed'(matrix_A.cells[cnt_i][cnt_j]));
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
@@ -389,7 +389,7 @@ module matrix_alu (
                 // result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg * 24'(signed'(scalar_val)));
 
                 // Write to stream (full precision)
-                stream_data_reg <= 32'(op_a_reg * 24'(signed'(scalar_val)));
+                stream_data_reg <= op_a_reg * 32'(signed'(scalar_val));
                 stream_last_col_reg <= (cnt_j == limit_j - 1);
                 stream_valid_reg <= 1;
 
@@ -401,7 +401,7 @@ module matrix_alu (
             OP_TRANSPOSE: begin
               // Transpose is just a move, but we pipeline it to be safe and consistent
               if (!pipe_valid) begin
-                op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_j][cnt_i]));  // Note indices
+                op_a_reg   <= 32'(signed'(matrix_A.cells[cnt_j][cnt_i]));  // Note indices
                 pipe_valid <= 1;
               end else begin
                 // Write to storage - Removed
@@ -438,8 +438,8 @@ module matrix_alu (
                 // Accumulation Phase
                 if (!pipe_valid) begin
                   // Stage 1: Fetch
-                  op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_i][cnt_k]));
-                  op_b_reg   <= 24'(signed'(matrix_B.cells[cnt_k][cnt_j]));
+                  op_a_reg   <= 32'(signed'(matrix_A.cells[cnt_i][cnt_k]));
+                  op_b_reg   <= 32'(signed'(matrix_B.cells[cnt_k][cnt_j]));
                   pipe_valid <= 1;
                 end else begin
                   // Stage 2: Accumulate
@@ -471,8 +471,8 @@ module matrix_alu (
                   logic [3:0] r, c;
                   r = cnt_k / 3;
                   c = cnt_k % 3;
-                  op_a_reg   <= 24'(signed'({4'b0, img_data[(cnt_i+r)*12+(cnt_j+c)]}));
-                  op_b_reg   <= 24'(signed'(matrix_B.cells[r][c]));
+                  op_a_reg   <= 32'(signed'({4'b0, img_data[(cnt_i+r)*12+(cnt_j+c)]}));
+                  op_b_reg   <= 32'(signed'(matrix_B.cells[r][c]));
                   pipe_valid <= 1;
                 end else begin
                   // Stage 2: Accumulate

@@ -83,6 +83,13 @@ module matrix_calc_sys (
     SEL_WAIT_DET,  // Wait for Detail Done
     SEL_WAIT_ID,   // Wait for User Input ID
 
+    // New States for Confirmation
+    PRINT_A,
+    WAIT_PRINT_A,
+    PRINT_B,
+    WAIT_PRINT_B,
+    CONFIRM_SELECTION,
+
     CONFIRM_SCALAR,  // Wait for SW Scalar & Confirm (Optional state)
     EXEC_ALU,        // Trigger ALU
     WAIT_ALU,        // Wait for ALU completion
@@ -333,7 +340,7 @@ module matrix_calc_sys (
               end else if (op_reg == OP_SCALAR_MUL) begin
                 state <= CONFIRM_SCALAR;
               end else begin
-                state <= EXEC_ALU;
+                state <= PRINT_A;
               end
             end else begin
               id_b_reg <= rx_decoded_val;
@@ -341,8 +348,56 @@ module matrix_calc_sys (
               seg_content[1] <= code_t'((rx_decoded_val / 10) % 10);
               seg_content[0] <= code_t'(rx_decoded_val % 10);
 
-              state <= EXEC_ALU;
+              state <= PRINT_A;
             end
+          end
+        end
+
+        // ======================================================
+        // New: Print & Confirm Selection
+        // ======================================================
+        PRINT_A: begin
+          disp_req_en <= 1;
+          disp_req_cmd <= 3;  // Single ID
+          // Split ID A into m and n
+          disp_req_m <= id_a_reg[5:3];
+          disp_req_n <= id_a_reg[2:0];
+          state <= WAIT_PRINT_A;
+        end
+
+        WAIT_PRINT_A: begin
+          if (disp_req_done) begin
+            disp_req_en <= 0;
+            if (op_reg == OP_ADD || op_reg == OP_MAT_MUL) begin
+              state <= PRINT_B;
+            end else begin
+              state <= CONFIRM_SELECTION;
+            end
+          end
+        end
+
+        PRINT_B: begin
+          disp_req_en <= 1;
+          disp_req_cmd <= 3;  // Single ID
+          disp_req_m <= id_b_reg[5:3];
+          disp_req_n <= id_b_reg[2:0];
+          state <= WAIT_PRINT_B;
+        end
+
+        WAIT_PRINT_B: begin
+          if (disp_req_done) begin
+            disp_req_en <= 0;
+            state <= CONFIRM_SELECTION;
+          end
+        end
+
+        CONFIRM_SELECTION: begin
+          // Display IDs on Seg (Already set in SEL_WAIT_ID / CONFIRM_SCALAR)
+          // Just wait for confirm
+          if (btn_pos_esc) begin
+            state <= SELECT_OP;
+          end else if (btn_pos_confirm) begin
+            state <= EXEC_ALU;
           end
         end
 
@@ -362,7 +417,7 @@ module matrix_calc_sys (
           if (btn_pos_esc) state <= SEL_SHOW_SUM;
           else if (btn_pos_confirm) begin
             // Scalar val is read directly from system_core wires by ALU
-            state <= EXEC_ALU;
+            state <= PRINT_A;
           end
         end
 

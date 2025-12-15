@@ -33,7 +33,7 @@ module matrix_display (
 
     // --- 外部调用接口 (Slave Mode) ---
     input  wire                 ext_en,   // 外部使能
-    input  wire [          1:0] ext_cmd,  // 1: Summary, 2: Detail
+    input  wire [          1:0] ext_cmd,  // 1: Summary, 2: Detail, 3: Single ID
     input  wire [ROW_IDX_W-1:0] ext_m,
     input  wire [COL_IDX_W-1:0] ext_n,
     output reg                  ext_done,
@@ -58,7 +58,7 @@ module matrix_display (
     input  wire             sender_ready,
 
     // --- 状态指示 ---
-    output reg display_done,  // 退出 Display 模式信号
+    output reg  display_done,   // 退出 Display 模式信号
     output wire display_active, // 活动状态指示
 
     // --- 预留数码管输出接口 ---
@@ -179,6 +179,10 @@ module matrix_display (
               // Calculate Index from ext_m/n
               scan_idx <= (ext_m - 1) * MAX_COLS + (ext_n - 1);
               state <= DET_CALC_BASE;
+            end else if (ext_cmd == 3) begin
+              // Single ID Mode
+              rd_id <= {ext_m, ext_n};
+              state <= DET_READ_RAM;
             end
           end
         end
@@ -394,18 +398,24 @@ module matrix_display (
 
         DET_NEXT_MAT: begin
           if (sender_done) begin
-            // 检查是否还有下一个矩阵
-            if (mats_printed < type_valid_cnt[scan_idx] - 1) begin
-              mats_printed <= mats_printed + 1;
-              rd_id <= rd_id + 1;
-              state <= DET_READ_RAM;
+            // Single ID Mode: Exit immediately
+            if (ext_en && ext_cmd == 3) begin
+              ext_done <= 1;
+              state <= WAIT_EXT_LOW;
             end else begin
-              // 全部打印完，回等待命令
-              if (ext_en) begin
-                ext_done <= 1;
-                state <= WAIT_EXT_LOW;
+              // 检查是否还有下一个矩阵
+              if (mats_printed < type_valid_cnt[scan_idx] - 1) begin
+                mats_printed <= mats_printed + 1;
+                rd_id <= rd_id + 1;
+                state <= DET_READ_RAM;
               end else begin
-                state <= WAIT_INPUT_M;
+                // 全部打印完，回等待命令
+                if (ext_en) begin
+                  ext_done <= 1;
+                  state <= WAIT_EXT_LOW;
+                end else begin
+                  state <= WAIT_INPUT_M;
+                end
               end
             end
           end

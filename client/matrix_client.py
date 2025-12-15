@@ -454,8 +454,14 @@ def main(page: ft.Page):
     # --- Logs System ---
     log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
     
+    last_rx_time = 0
+    last_rx_control = None
+
     def log(msg, type="info"):
+        nonlocal last_rx_time, last_rx_control
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        current_time = time.time()
+        
         # 根据当前模式选择日志颜色，保证可见性
         is_dark = page.theme_mode == ft.ThemeMode.DARK
         
@@ -472,18 +478,41 @@ def main(page: ft.Page):
             color = ft.Colors.ON_SURFACE_VARIANT
             prefix = "INF *"
         
-        log_view.controls.append(
-            ft.Text(
-                spans=[
-                    ft.TextSpan(f"[{timestamp}] ", style=ft.TextStyle(color=ft.Colors.OUTLINE)),
-                    ft.TextSpan(f"{prefix} ", style=ft.TextStyle(color=color, weight=ft.FontWeight.BOLD)),
-                    ft.TextSpan(msg, style=ft.TextStyle(color=ft.Colors.ON_SURFACE))
-                ],
-                font_family="Consolas, monospace", 
-                size=12, 
-                selectable=True
-            )
+        # Group RX logs if within 1 second
+        if type == "rx" and last_rx_control and (current_time - last_rx_time < 1.0):
+            try:
+                # Append to the last span (message part)
+                last_rx_control.spans[-1].text += "\n" + msg
+                last_rx_time = current_time
+                page.update()
+                return
+            except:
+                pass
+
+        # New log entry
+        # Explicitly set font family for all spans to ensure alignment
+        # Try a stricter font stack
+        font_family = "Consolas" 
+        
+        new_control = ft.Text(
+            spans=[
+                ft.TextSpan(f"[{timestamp}] ", style=ft.TextStyle(color=ft.Colors.OUTLINE)),
+                ft.TextSpan(f"{prefix} ", style=ft.TextStyle(color=color, weight=ft.FontWeight.BOLD)),
+                ft.TextSpan("\n" + msg, style=ft.TextStyle(color=ft.Colors.ON_SURFACE))
+            ],
+            size=12, 
+            selectable=True,
+            font_family=font_family, # Set globally for the Text control
         )
+        
+        log_view.controls.append(new_control)
+        
+        if type == "rx":
+            last_rx_time = current_time
+            last_rx_control = new_control
+        else:
+            last_rx_control = None
+            
         page.update()
 
     # --- Parser Logic ---
@@ -555,6 +584,8 @@ def main(page: ft.Page):
             del rx_numbers[:idx+expected_len]
 
     # --- Serial Callbacks ---
+    log_buffer = ""
+
     def on_serial_status(connected, msg):
         status_indicator.bgcolor = "green" if connected else "red"
         status_text.value = "ONLINE" if connected else "OFFLINE"
@@ -571,8 +602,22 @@ def main(page: ft.Page):
         page.update()
 
     def on_result_received(text_data):
-        log(text_data.strip(), "rx")
+        nonlocal log_buffer
         process_rx_data(text_data)
+        
+        log_buffer += text_data
+        
+        # Prevent buffer overflow
+        if len(log_buffer) > 5000:
+            log(log_buffer, "rx")
+            log_buffer = ""
+            return
+
+        while '\n' in log_buffer:
+            line, log_buffer = log_buffer.split('\n', 1)
+            line = line.strip()
+            if line:
+                log(line, "rx")
 
     serial_manager = SerialManager(on_result_received, on_serial_status)
 
@@ -603,12 +648,6 @@ def main(page: ft.Page):
         payload = bytearray([r, c]) + bytearray(data_bytes)
         serial_manager.send_bytes(payload)
         log(f"Matrix {r}x{c} sent ({len(data_bytes)} bytes)", "tx")
-
-    def send_virtual_confirm(e):
-        if serial_manager.send_bytes(b'\r'):
-            log("Sent CR (\\r)", "tx")
-        else:
-            log("Cannot send: Disconnected", "error")
 
     def send_storage_refresh():
         if not serial_manager.is_connected:
@@ -782,16 +821,8 @@ def main(page: ft.Page):
                 ])
             ),
 
-            # 3. Quick Actions
-            StyledCard(
-                title="Tools", icon=ft.Icons.BUILD_CIRCLE,
-                content=ft.Column([
-                    ft.ElevatedButton("Send Confirm (\\r)", icon=ft.Icons.KEYBOARD_RETURN, on_click=send_virtual_confirm, width=1000),
-                    ft.Text("Use this to manually trigger processing if auto-trigger fails.", size=10, color=ft.Colors.OUTLINE)
-                ])
-            ),
-
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+            # 3. Quick Actions (Removed)
+            # ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
 
             # 4. Mode Tabs (Replaces individual cards)
             ft.Container(
@@ -872,6 +903,9 @@ def main(page: ft.Page):
             tabs
         ], expand=True)
     )
+
+    # Debug: Print an alignment test pattern
+    log("Alignment Test:\n1234567890\n..........", "info")
 
     refresh_ports(None)
 

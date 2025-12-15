@@ -286,6 +286,63 @@ class MatrixOutput(ft.Column):
         if self.page:
             self.update()
 
+class StorageControl(ft.Column):
+    def __init__(self, on_refresh, on_fetch):
+        super().__init__()
+        self.on_refresh = on_refresh
+        self.on_fetch = on_fetch
+        self.spacing = 15
+        
+        self.rows_field = ft.TextField(
+            label="R", value="3", width=60, 
+            text_size=14, content_padding=10, text_align=ft.TextAlign.CENTER,
+            border_color=ft.Colors.PRIMARY
+        )
+        self.cols_field = ft.TextField(
+            label="C", value="3", width=60, 
+            text_size=14, content_padding=10, text_align=ft.TextAlign.CENTER,
+            border_color=ft.Colors.PRIMARY
+        )
+
+        self.controls = [
+            ft.ElevatedButton(
+                "Refresh Summary", 
+                icon=ft.Icons.REFRESH, 
+                on_click=lambda e: self.on_refresh(),
+                style=ft.ButtonStyle(
+                    bgcolor=ft.Colors.TERTIARY,
+                    color=ft.Colors.ON_TERTIARY,
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                ),
+                width=1000
+            ),
+            ft.Container(height=5),
+            ft.Row([
+                ft.Text("Fetch Size:", color=ft.Colors.OUTLINE),
+                self.rows_field,
+                ft.Text("×", size=14, color=ft.Colors.OUTLINE),
+                self.cols_field,
+                ft.IconButton(
+                    icon=ft.Icons.DOWNLOAD, 
+                    icon_color=ft.Colors.PRIMARY,
+                    tooltip="Fetch Matrices",
+                    on_click=self.fetch_data
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Text("Check 'System Logs' for output", size=10, color=ft.Colors.OUTLINE, italic=True)
+        ]
+
+    def fetch_data(self, e):
+        try:
+            r = int(self.rows_field.value)
+            c = int(self.cols_field.value)
+            if r < 1 or c < 1 or r > 5 or c > 5:
+                if self.page: self.page.show_snack_bar(ft.SnackBar(content=ft.Text("Dimensions must be 1-5"), bgcolor="red"))
+                return
+            self.on_fetch(r, c)
+        except:
+            pass
+
 # ==============================================================================
 # Main Application
 # ==============================================================================
@@ -485,6 +542,27 @@ def main(page: ft.Page):
         else:
             log("Cannot send: Disconnected", "error")
 
+    def send_storage_refresh():
+        if not serial_manager.is_connected:
+            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            return
+        # Send '0' then '0' (ASCII)
+        if serial_manager.send_bytes(b'00'):
+            log("Sent Storage Refresh (00)", "tx")
+        else:
+            log("Cannot send: Disconnected", "error")
+
+    def send_storage_fetch(r, c):
+        if not serial_manager.is_connected:
+            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            return
+        # Send 'r' then 'c' (ASCII)
+        cmd = str(r).encode('ascii') + str(c).encode('ascii')
+        if serial_manager.send_bytes(cmd):
+            log(f"Sent Storage Fetch ({r}x{c})", "tx")
+        else:
+            log("Cannot send: Disconnected", "error")
+
     # --- Theme Toggle ---
     def toggle_theme(e):
         page.theme_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
@@ -550,6 +628,11 @@ def main(page: ft.Page):
         content=MatrixOutput()
     )
 
+    storage_section = StyledCard(
+        title="Storage Viewer", icon=ft.Icons.STORAGE,
+        content=StorageControl(send_storage_refresh, send_storage_fetch)
+    )
+
     sidebar = ft.Container(
         width=450,
         content=ft.Column([
@@ -591,6 +674,9 @@ def main(page: ft.Page):
 
             # 4. Matrix Input
             matrix_section,
+            
+            # 5. Storage Viewer
+            storage_section,
             
             ft.Container(expand=True),
             ft.Text("Designed with Flet", size=10, color=ft.Colors.OUTLINE, text_align=ft.TextAlign.CENTER)

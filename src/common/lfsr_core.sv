@@ -68,7 +68,8 @@ module lfsr_core (
       offset_reg <= 0;
     end else if (en) begin
       // (lfsr_raw * range_len_reg) / 256
-      offset_reg <= (lfsr_raw * range_len_reg) >> 8;
+      // Explicitly extend width to 17 bits to prevent truncation before shift
+      offset_reg <= (17'(lfsr_raw) * 17'(range_len_reg)) >> 8;
     end
   end
 

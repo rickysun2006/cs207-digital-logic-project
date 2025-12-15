@@ -41,15 +41,15 @@ module output_controller (
     input wire                            disp_active,           // Display 模块处于活动状态
 
     // --- Source 3: From Matrix Result Printer (ALU Result) ---
-    input wire             res_sender_start,
-    input matrix_element_t res_sender_data,
-    input wire             res_sender_last_col,
-    input wire             res_sender_newline,
+    input wire                res_sender_start,
+    input logic signed [31:0] res_sender_data,
+    input wire                res_sender_last_col,
+    input wire                res_sender_newline,
 
     // --- Source 3.5: From ALU Stream (Convolution) ---
-    input wire             alu_stream_valid,
-    input matrix_element_t alu_stream_data,
-    input wire             alu_stream_last_col,
+    input wire                alu_stream_valid,
+    input logic signed [31:0] alu_stream_data,
+    input wire                alu_stream_last_col,
 
     // --- Source 4: From Input Controller (ALU Operand Selection) ---
     // ALU 计算前选择操作数时，可能也需要读取 Port A 来显示？
@@ -68,13 +68,13 @@ module output_controller (
     input wire             [MAT_ID_W-1:0] inp_rd_id,
 
     // --- Destination 1: To UART Sender ---
-    output reg              mux_sender_start,
-    output matrix_element_t mux_sender_data,
-    output reg              mux_sender_last_col,
-    output reg              mux_sender_newline,
-    output reg              mux_sender_id,
-    output reg              mux_sender_sum_head,
-    output reg              mux_sender_sum_elem,
+    output reg                 mux_sender_start,
+    output logic signed [31:0] mux_sender_data,
+    output reg                 mux_sender_last_col,
+    output reg                 mux_sender_newline,
+    output reg                 mux_sender_id,
+    output reg                 mux_sender_sum_head,
+    output reg                 mux_sender_sum_elem,
 
     // --- Destination 2: To Matrix Storage (Read Port A) ---
     output reg [MAT_ID_W-1:0] mux_rd_id_A
@@ -99,7 +99,7 @@ module output_controller (
       // --------------------------------------------------------
       STATE_INPUT: begin
         mux_sender_start    = inp_sender_start;
-        mux_sender_data     = inp_sender_data;
+        mux_sender_data     = 32'(signed'(inp_sender_data));
         mux_sender_last_col = inp_sender_last_col;
         mux_sender_newline  = inp_sender_newline;
         mux_sender_id       = inp_sender_id;
@@ -111,7 +111,7 @@ module output_controller (
       // --------------------------------------------------------
       STATE_GEN: begin
         mux_sender_start    = gen_sender_start;
-        mux_sender_data     = gen_sender_data;
+        mux_sender_data     = 32'(signed'(gen_sender_data));
         mux_sender_last_col = gen_sender_last_col;
         mux_sender_newline  = gen_sender_newline;
         // Gen 模式下通常不读 RAM (它是写的)，也不用高级格式
@@ -122,7 +122,7 @@ module output_controller (
       // --------------------------------------------------------
       STATE_DISPLAY: begin
         mux_sender_start    = disp_sender_start;
-        mux_sender_data     = disp_sender_data;
+        mux_sender_data     = 32'(signed'(disp_sender_data));
         mux_sender_last_col = disp_sender_last_col;
         mux_sender_newline  = disp_sender_newline;
         mux_sender_id       = disp_sender_id;
@@ -141,7 +141,7 @@ module output_controller (
         // Fix: Use disp_active to switch read ID even when not sending (e.g. reading RAM)
         if (disp_active) begin
           mux_sender_start    = disp_sender_start;
-          mux_sender_data     = disp_sender_data;
+          mux_sender_data     = 32'(signed'(disp_sender_data));
           mux_sender_last_col = disp_sender_last_col;
           mux_sender_newline  = disp_sender_newline;
           mux_sender_id       = disp_sender_id;

@@ -26,11 +26,11 @@ module matrix_uart_sender (
     input logic rst_n,
 
     // --- 控制接口 ---
-    input logic            start,         // 普通模式：发送数字
-    input matrix_element_t data_in,       // 待发送的数值
-    input logic            is_last_col,   // 行尾标志
-    input logic            send_newline,  // 仅发送换行
-    input logic            send_id,       // 发送ID (不补齐空格)
+    input logic               start,         // 普通模式：发送数字
+    input logic signed [31:0] data_in,       // 待发送的数值 (Widened to 32-bit)
+    input logic               is_last_col,   // 行尾标志
+    input logic               send_newline,  // 仅发送换行
+    input logic               send_id,       // 发送ID (不补齐空格)
 
     input logic send_summary_head,  // 发送总数+表头
     input logic send_summary_elem,  // 发送表格元素
@@ -58,30 +58,31 @@ module matrix_uart_sender (
   typedef enum logic [4:0] {
     IDLE,
     PREPARE,
+    CONVERT,           // New: Sequential BCD conversion
+    SUM_START_PIPE,
     SEND_SIGN,
-    SEND_DIGIT_2,
-    SEND_DIGIT_1,
-    SEND_DIGIT_0,  // 数字序列
+    SEND_DIGITS,       // New: Loop to send digits
     SEND_PADDING,
-    SEND_END,      // 普通换行
-    WAIT_TX,       // 等待 UART
-
-    SUM_START_PIPE,    // 打印行首 '| '
-    SUM_END_PIPE,      // 打印行尾 ' |'
-    SUM_PRINT_BORDER,  // 打印 +----+...
-    SUM_PRINT_HEADER,  // 打印 | m | n ...
     SUM_NL_1,
     SUM_NL_2,
-    SUM_NL_3           // 各种换行
+    SUM_PRINT_HEADER,
+    SUM_PRINT_BORDER,
+    SUM_END_PIPE,
+    SUM_NL_3,
+    SEND_END,
+    WAIT_TX
   } state_t;
+
   state_t state, next_state, return_state;
 
-  // --- internal signals ---
-  logic       is_negative;
-  logic [7:0] abs_val;
-  logic [3:0] bcd_2, bcd_1, bcd_0;
+  // --- 内部寄存器 ---
   logic [4:0] char_count;
-  matrix_element_t data_latched;
+  logic signed [31:0] data_latched;
+  logic [31:0] abs_val;
+  logic is_negative;
+  logic [3:0] bcd_digits[0:9];  // Buffer for digits (Max 10 for 32-bit)
+  logic [3:0] digit_idx;  // Current digit index
+  logic [3:0] total_digits;  // Total digits found
 
   // 模式寄存器 (锁存当前请求类型)
   logic mode_sum_head, mode_sum_elem;
@@ -124,14 +125,7 @@ module matrix_uart_sender (
     endcase
   endfunction
 
-  // --- 数值预处理 ---
-  always_comb begin
-    is_negative = (data_latched < 0);
-    abs_val     = is_negative ? (~data_latched + 1) : data_latched;
-    bcd_2       = abs_val / 100;
-    bcd_1       = (abs_val % 100) / 10;
-    bcd_0       = abs_val % 10;
-  end
+
 
   // --- 状态机 ---
   always_ff @(posedge clk or negedge rst_n) begin
@@ -196,14 +190,20 @@ module matrix_uart_sender (
         // 数字发送核心 (通用)
         // ========================
         PREPARE: begin
-          if (is_negative) begin
-            state <= SEND_SIGN;
-          end else if (bcd_2 > 0) begin
-            state <= SEND_DIGIT_2;
-          end else if (bcd_1 > 0) begin
-            state <= SEND_DIGIT_1;
+          is_negative <= (data_latched < 0);
+          abs_val     <= (data_latched < 0) ? (~data_latched + 1) : data_latched;
+          digit_idx   <= 0;
+          state       <= CONVERT;
+        end
+
+        CONVERT: begin
+          bcd_digits[digit_idx] <= abs_val % 10;
+          abs_val <= abs_val / 10;
+
+          if ((abs_val / 10) == 0) begin
+            state <= is_negative ? SEND_SIGN : SEND_DIGITS;
           end else begin
-            state <= SEND_DIGIT_0;
+            digit_idx <= digit_idx + 1;
           end
         end
 
@@ -211,30 +211,24 @@ module matrix_uart_sender (
           tx_data <= "-";
           tx_start <= 1;
           char_count <= char_count + 1;
-          return_state = (bcd_2 > 0) ? SEND_DIGIT_2 : ((bcd_1 > 0) ? SEND_DIGIT_1 : SEND_DIGIT_0);
           state <= WAIT_TX;
+          return_state <= SEND_DIGITS;
         end
-        SEND_DIGIT_2: begin
-          tx_data <= {4'h3, bcd_2};
+
+        SEND_DIGITS: begin
+          tx_data <= {4'h3, bcd_digits[digit_idx]};
           tx_start <= 1;
           char_count <= char_count + 1;
-          return_state <= SEND_DIGIT_1;
           state <= WAIT_TX;
+
+          if (digit_idx == 0) begin
+            return_state <= SEND_PADDING;
+          end else begin
+            digit_idx <= digit_idx - 1;
+            return_state <= SEND_DIGITS;
+          end
         end
-        SEND_DIGIT_1: begin
-          tx_data <= {4'h3, bcd_1};
-          tx_start <= 1;
-          char_count <= char_count + 1;
-          return_state <= SEND_DIGIT_0;
-          state <= WAIT_TX;
-        end
-        SEND_DIGIT_0: begin
-          tx_data <= {4'h3, bcd_0};
-          tx_start <= 1;
-          char_count <= char_count + 1;
-          return_state <= SEND_PADDING;
-          state <= WAIT_TX;
-        end
+
 
         // ========================
         // 补齐与后缀逻辑

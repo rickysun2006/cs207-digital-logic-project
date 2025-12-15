@@ -42,10 +42,10 @@ module matrix_alu (
     output logic    [31:0] cycle_cnt,
 
     // --- Streaming Interface (For Convolution) ---
-    output logic            stream_valid,
-    output matrix_element_t stream_data,
-    output logic            stream_last_col,
-    input  wire             stream_ready
+    output logic               stream_valid,
+    output logic signed [31:0] stream_data,
+    output logic               stream_last_col,
+    input  wire                stream_ready
 );
 
   // --- Internal State ---
@@ -55,33 +55,33 @@ module matrix_alu (
     ALU_WAIT_TX,
     ALU_DONE
   } alu_state_t;
-  alu_state_t             state;
+  alu_state_t         state;
 
   // Counters
-  logic            [ 3:0] cnt_i;  // Row
-  logic            [ 3:0] cnt_j;  // Col
-  logic            [ 3:0] cnt_k;  // Dot product accumulator iterator
+  logic        [ 3:0] cnt_i;  // Row
+  logic        [ 3:0] cnt_j;  // Col
+  logic        [ 3:0] cnt_k;  // Dot product accumulator iterator
 
-  logic            [ 3:0] limit_i;
-  logic            [ 3:0] limit_j;
-  logic            [ 3:0] limit_k;  // For dot product loop
+  logic        [ 3:0] limit_i;
+  logic        [ 3:0] limit_j;
+  logic        [ 3:0] limit_k;  // For dot product loop
 
   // Cycle Counter
-  logic            [31:0] perf_cnt;
+  logic        [31:0] perf_cnt;
 
   // Accumulators (Width expanded to prevent overflow)
-  logic signed     [23:0] accum;
-  logic signed     [23:0] current_prod;
+  logic signed [23:0] accum;
+  logic signed [23:0] current_prod;
 
   // --- Pipeline Registers (Timing Fix) ---
-  logic signed     [23:0] op_a_reg;
-  logic signed     [23:0] op_b_reg;
-  logic                   pipe_valid;  // 1: Execute Stage, 0: Fetch Stage
+  logic signed [23:0] op_a_reg;
+  logic signed [23:0] op_b_reg;
+  logic               pipe_valid;  // 1: Execute Stage, 0: Fetch Stage
 
   // Output Registers for Stream
-  matrix_element_t        stream_data_reg;
-  logic                   stream_valid_reg;
-  logic                   stream_last_col_reg;
+  logic signed [31:0] stream_data_reg;
+  logic               stream_valid_reg;
+  logic               stream_last_col_reg;
 
   assign stream_data = stream_data_reg;
   assign stream_valid = stream_valid_reg;
@@ -457,7 +457,7 @@ module matrix_alu (
             OP_CONV: begin
               if (cnt_k == limit_k) begin
                 // Writeback Phase (Accumulation Complete)
-                stream_data_reg <= saturate(accum);
+                stream_data_reg <= 32'(accum);  // No saturation for convolution stream
                 stream_last_col_reg <= (cnt_j == limit_j - 1);
                 stream_valid_reg <= 1;
 

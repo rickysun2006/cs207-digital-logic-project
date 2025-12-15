@@ -149,7 +149,7 @@ module system_core (
   logic            [31:0] alu_cycle_cnt;  // Bonus 性能计数
   // ALU Stream
   logic                   alu_stream_valid;
-  matrix_element_t        alu_stream_data;
+  logic signed     [31:0] alu_stream_data;
   logic                   alu_stream_last;
   logic                   alu_stream_ready;
 
@@ -163,18 +163,18 @@ module system_core (
 
   // Combined Result Sender (ALU Stream OR Printer)
   logic                   res_snd_start;
-  matrix_element_t        res_snd_data;
+  logic signed     [31:0] res_snd_data;
   logic                   res_snd_last;
   logic                   res_snd_nl;
 
   assign res_snd_start = (sys_calc_op == OP_CONV) ? alu_stream_valid : res_snd_start_printer;
-  assign res_snd_data  = (sys_calc_op == OP_CONV) ? alu_stream_data : res_snd_data_printer;
-  assign res_snd_last  = (sys_calc_op == OP_CONV) ? alu_stream_last : res_snd_last_printer;
-  assign res_snd_nl    = (sys_calc_op == OP_CONV) ? 1'b0 : res_snd_nl_printer;
+  assign res_snd_data  = (sys_calc_op == OP_CONV) ? alu_stream_data : 32'(signed'(res_snd_data_printer));
+  assign res_snd_last = (sys_calc_op == OP_CONV) ? alu_stream_last : res_snd_last_printer;
+  assign res_snd_nl = (sys_calc_op == OP_CONV) ? 1'b0 : res_snd_nl_printer;
 
   // --- MUX Outputs (To Sender) ---
-  logic            mux_tx_start;
-  matrix_element_t mux_tx_data;
+  logic               mux_tx_start;
+  logic signed [31:0] mux_tx_data;
   logic mux_tx_last, mux_tx_nl;
   logic mux_tx_id;
   logic mux_tx_head, mux_tx_elem;

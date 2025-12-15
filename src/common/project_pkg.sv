@@ -127,8 +127,8 @@ package project_pkg;
   localparam code_t CHAR_8 = 5'd8;
   localparam code_t CHAR_9 = 5'd9;
   localparam code_t CHAR_A = 5'd10;  // A (加法)
-  localparam code_t CHAR_B = 5'd11;  // b (标量乘法)
-  localparam code_t CHAR_C = 5'd12;  // C (矩阵乘法)
+  localparam code_t CHAR_B = 5'd11;  // b (矩阵乘法)
+  localparam code_t CHAR_C = 5'd12;  // C (标量乘法)
   localparam code_t CHAR_D = 5'd13;
   localparam code_t CHAR_E = 5'd14;  // E (Err 的 E)
   localparam code_t CHAR_F = 5'd15;

@@ -365,17 +365,16 @@ module matrix_alu (
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
+                // Write to storage (saturated)
                 result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg + op_b_reg);
-                pipe_valid <= 0;  // Back to fetch
 
-                // Loop Logic
-                if (cnt_j == limit_j - 1) begin
-                  cnt_j <= 0;
-                  if (cnt_i == limit_i - 1) begin
-                    result_matrix.is_valid <= 1;
-                    state <= ALU_DONE;
-                  end else cnt_i <= cnt_i + 1;
-                end else cnt_j <= cnt_j + 1;
+                // Write to stream (full precision)
+                stream_data_reg <= 32'(op_a_reg + op_b_reg);
+                stream_last_col_reg <= (cnt_j == limit_j - 1);
+                stream_valid_reg <= 1;
+
+                pipe_valid <= 0;  // Back to fetch
+                state <= ALU_WAIT_TX;  // Handshake and Loop Logic
               end
             end
 
@@ -386,17 +385,16 @@ module matrix_alu (
                 pipe_valid <= 1;
               end else begin
                 // Stage 2: Execute & Write
+                // Write to storage (saturated)
                 result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg * 24'(signed'(scalar_val)));
-                pipe_valid <= 0;
 
-                // Loop Logic
-                if (cnt_j == limit_j - 1) begin
-                  cnt_j <= 0;
-                  if (cnt_i == limit_i - 1) begin
-                    result_matrix.is_valid <= 1;
-                    state <= ALU_DONE;
-                  end else cnt_i <= cnt_i + 1;
-                end else cnt_j <= cnt_j + 1;
+                // Write to stream (full precision)
+                stream_data_reg <= 32'(op_a_reg * 24'(signed'(scalar_val)));
+                stream_last_col_reg <= (cnt_j == limit_j - 1);
+                stream_valid_reg <= 1;
+
+                pipe_valid <= 0;
+                state <= ALU_WAIT_TX;
               end
             end
 
@@ -406,17 +404,16 @@ module matrix_alu (
                 op_a_reg   <= 24'(signed'(matrix_A.cells[cnt_j][cnt_i]));  // Note indices
                 pipe_valid <= 1;
               end else begin
+                // Write to storage
                 result_matrix.cells[cnt_i][cnt_j] <= saturate(op_a_reg);
-                pipe_valid <= 0;
 
-                // Loop Logic
-                if (cnt_j == limit_j - 1) begin
-                  cnt_j <= 0;
-                  if (cnt_i == limit_i - 1) begin
-                    result_matrix.is_valid <= 1;
-                    state <= ALU_DONE;
-                  end else cnt_i <= cnt_i + 1;
-                end else cnt_j <= cnt_j + 1;
+                // Write to stream
+                stream_data_reg <= 32'(op_a_reg);
+                stream_last_col_reg <= (cnt_j == limit_j - 1);
+                stream_valid_reg <= 1;
+
+                pipe_valid <= 0;
+                state <= ALU_WAIT_TX;
               end
             end
 
@@ -424,19 +421,19 @@ module matrix_alu (
             OP_MAT_MUL: begin
               if (cnt_k == limit_k) begin
                 // Writeback Phase (Accumulation Complete)
+                // Write to storage (saturated)
                 result_matrix.cells[cnt_i][cnt_j] <= saturate(accum);
+
+                // Write to stream (full precision)
+                stream_data_reg <= 32'(accum);
+                stream_last_col_reg <= (cnt_j == limit_j - 1);
+                stream_valid_reg <= 1;
+
                 accum <= 0;
                 cnt_k <= 0;
                 pipe_valid <= 0;
 
-                // Move to next cell
-                if (cnt_j == limit_j - 1) begin
-                  cnt_j <= 0;
-                  if (cnt_i == limit_i - 1) begin
-                    result_matrix.is_valid <= 1;
-                    state <= ALU_DONE;
-                  end else cnt_i <= cnt_i + 1;
-                end else cnt_j <= cnt_j + 1;
+                state <= ALU_WAIT_TX;
               end else begin
                 // Accumulation Phase
                 if (!pipe_valid) begin
@@ -460,7 +457,8 @@ module matrix_alu (
                 stream_data_reg <= 32'(accum);  // No saturation for convolution stream
                 stream_last_col_reg <= (cnt_j == limit_j - 1);
                 stream_valid_reg <= 1;
-
+                // Optional: Store saturated result if needed (currently skipped to save logic/time if not used)
+                // result_matrix.cells[cnt_i][cnt_j] <= saturate(accum);
                 accum <= 0;
                 cnt_k <= 0;
                 pipe_valid <= 0;
@@ -501,7 +499,8 @@ module matrix_alu (
             if (cnt_j == limit_j - 1) begin
               cnt_j <= 0;
               if (cnt_i == limit_i - 1) begin
-                // Finished entire image
+                // Finished entire operation
+                result_matrix.is_valid <= 1;  // Mark result as valid
                 state <= ALU_DONE;
               end else begin
                 cnt_i <= cnt_i + 1;

@@ -167,10 +167,11 @@ module system_core (
   logic                   res_snd_last;
   logic                   res_snd_nl;
 
-  assign res_snd_start = (sys_calc_op == OP_CONV) ? alu_stream_valid : res_snd_start_printer;
-  assign res_snd_data  = (sys_calc_op == OP_CONV) ? alu_stream_data : 32'(signed'(res_snd_data_printer));
-  assign res_snd_last = (sys_calc_op == OP_CONV) ? alu_stream_last : res_snd_last_printer;
-  assign res_snd_nl = (sys_calc_op == OP_CONV) ? 1'b0 : res_snd_nl_printer;
+  // Unified Output: All operations use ALU Stream
+  assign res_snd_start = alu_stream_valid;
+  assign res_snd_data  = alu_stream_data;
+  assign res_snd_last  = alu_stream_last;
+  assign res_snd_nl    = 1'b0; // Stream uses last_col to trigger newline
 
   // --- MUX Outputs (To Sender) ---
   logic               mux_tx_start;

@@ -379,11 +379,8 @@ module matrix_calc_sys (
             err_timer <= 0;
             state <= ERROR_HOLD;
           end else if (alu_done) begin
-            if (op_reg == OP_CONV) begin
-              state <= DONE_WAIT;  // Skip printing (already streamed)
-            end else begin
-              state <= EXEC_PRINT;
-            end
+            // All operations now use streaming output during ALU execution
+            state <= DONE_WAIT;
           end
         end
 

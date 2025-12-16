@@ -33,12 +33,14 @@ module matrix_gen (
     input wire       rx_done,
 
     // --- Sender 模块接口 ---
-    output matrix_element_t sender_data,
-    output reg              sender_start,
-    output reg              sender_is_last_col,
-    output reg              sender_newline_only,
-    input  wire             sender_done,
-    input  wire             sender_ready,
+    output matrix_element_t       sender_data,
+    output reg                    sender_start,
+    output reg                    sender_str,
+    output reg              [2:0] sender_str_id,
+    output reg                    sender_is_last_col,
+    output reg                    sender_newline_only,
+    input  wire                   sender_done,
+    input  wire                   sender_ready,
 
     // --- 写入存储接口 ---
     output reg wr_cmd_new,
@@ -52,18 +54,27 @@ module matrix_gen (
     // --- 控制接口 ---
     input  wire btn_exit_gen,
     output reg  gen_done,
+    output reg  gen_err,
 
     // --- 预留数码管输出接口 ---
     output code_t [7:0] seg_data,
     output reg    [7:0] seg_blink
 );
   // --- 点亮数码管，指示工作中 ---
-  assign seg_data  = {CHAR_6, CHAR_E, CHAR_N, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
+  assign seg_data  = (state == ERROR_STATE) ? 
+      {CHAR_E, CHAR_R, CHAR_R, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK} :
+      {CHAR_6, CHAR_E, CHAR_N, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK};
   assign seg_blink = 8'b1111_1111;
+
+  // --- 参数定义 ---
+  // 3s @ 100MHz = 300,000,000 cycles
+  localparam int ERR_TIMEOUT_CYCLES = 300_000_000;
 
   // --- 内部状态定义 ---
   typedef enum logic [3:0] {
     IDLE,
+    SEND_MODE_STR,
+    WAIT_MODE_STR,
     GET_M,
     GET_N,
     GET_COUNT,
@@ -73,6 +84,7 @@ module matrix_gen (
     NEXT_ELEM,
     GEN_GAP,
     TX_WAIT_GAP,
+    ERROR_STATE,
     DONE
   } state_t;
   state_t state, next_state;
@@ -80,6 +92,7 @@ module matrix_gen (
   // --- 寄存器 ---
   reg [7:0] mat_cnt;
   reg [7:0] cnt_m, cnt_n, cnt_k;
+  reg [28:0] timer_cnt;
   matrix_element_t val_latch;
 
   assign sender_data = val_latch;
@@ -95,20 +108,28 @@ module matrix_gen (
   always_comb begin
     next_state = state;
     case (state)
-      IDLE:       if (start_en) next_state = GET_M;
+      IDLE:          if (start_en) next_state = SEND_MODE_STR;
+      SEND_MODE_STR: if (sender_ready) next_state = WAIT_MODE_STR;
+      WAIT_MODE_STR: if (sender_done) next_state = GET_M;
       GET_M: begin
         if (btn_exit_gen) next_state = DONE;
-        else if (rx_done) next_state = GET_N;
+        else if (rx_done) begin
+          if (rx_data > 0 && rx_data <= MAX_ROWS) next_state = GET_N;
+          else next_state = ERROR_STATE;
+        end
       end
       GET_N: begin
-        if (rx_done) next_state = GET_COUNT;
+        if (rx_done) begin
+          if (rx_data > 0 && rx_data <= MAX_COLS) next_state = GET_COUNT;
+          else next_state = ERROR_STATE;
+        end
         if (btn_exit_gen) next_state = GET_M;
       end
       GET_COUNT: begin
         if (rx_done) next_state = GEN_CREATE;
         if (btn_exit_gen) next_state = GET_N;
       end
-      GEN_CREATE: next_state = GEN_WRITE;
+      GEN_CREATE:    next_state = GEN_WRITE;
 
       GEN_WRITE: begin
         if (sender_ready) next_state = TX_WAIT_SENDER;
@@ -142,6 +163,11 @@ module matrix_gen (
       TX_WAIT_GAP:
       if (sender_done) next_state = GEN_CREATE;  // 换行发完，创建下一个矩阵
 
+      ERROR_STATE: begin
+        if (timer_cnt >= ERR_TIMEOUT_CYCLES) next_state = GET_M;
+        else next_state = ERROR_STATE;
+      end
+
       DONE: if (!start_en) next_state = IDLE;
       default: next_state = IDLE;
     endcase
@@ -155,7 +181,11 @@ module matrix_gen (
       cnt_n <= 0;
       cnt_k <= 0;
       gen_done <= 0;
+      gen_err <= 0;
+      timer_cnt <= 0;
       sender_start <= 0;
+      sender_str <= 0;
+      sender_str_id <= 0;
       sender_newline_only <= 0;
       wr_cmd_single <= 0;
       wr_cmd_new <= 0;
@@ -168,10 +198,20 @@ module matrix_gen (
     end else begin
       // 默认信号归位
       sender_start        <= 0;
+      sender_str          <= 0;
       sender_newline_only <= 0;
       wr_cmd_new          <= 0;
       wr_cmd_single       <= 0;
       gen_done            <= 0;
+
+      // 计时器控制
+      if (state == ERROR_STATE) begin
+        if (timer_cnt < ERR_TIMEOUT_CYCLES) timer_cnt <= timer_cnt + 1;
+        gen_err <= 1;
+      end else begin
+        timer_cnt <= 0;
+        gen_err   <= 0;
+      end
 
       case (state)
         IDLE: begin
@@ -180,9 +220,18 @@ module matrix_gen (
           cnt_k <= 0;
         end
 
+        SEND_MODE_STR: begin
+          if (sender_ready) begin
+            sender_str <= 1;
+            sender_str_id <= 3'd1;  // mode-gen
+          end
+        end
+
         // --- 参数接收 ---
-        GET_M: if (rx_done) wr_dims_r <= rx_data[ROW_IDX_W-1:0];
-        GET_N: if (rx_done) wr_dims_c <= rx_data[COL_IDX_W-1:0];
+        GET_M:
+        if (rx_done && rx_data > 0 && rx_data <= MAX_ROWS) wr_dims_r <= rx_data[ROW_IDX_W-1:0];
+        GET_N:
+        if (rx_done && rx_data > 0 && rx_data <= MAX_COLS) wr_dims_c <= rx_data[COL_IDX_W-1:0];
         GET_COUNT: begin
           if (rx_done) begin
             mat_cnt <= rx_data;

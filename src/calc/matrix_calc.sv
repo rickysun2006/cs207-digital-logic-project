@@ -41,9 +41,17 @@ module matrix_calc_sys (
     // --- Configuration ---
     input wire [3:0] cfg_err_countdown,
 
+    // --- Random Number ---
+    input wire [7:0] rand_val,
+
     // --- UART Interaction (For selecting Matrix IDs) ---
     input wire [7:0] rx_data,
     input wire       rx_done,
+
+    output reg        sender_str,
+    output reg  [2:0] sender_str_id,
+    input  wire       sender_done,
+    input  wire       sender_ready,
 
     // --- Sub-Modules Interfaces ---
     // 1. To ALU
@@ -82,7 +90,10 @@ module matrix_calc_sys (
   // --- States ---
   typedef enum logic [4:0] {
     IDLE,
-    SELECT_OP, // Wait for SW selection & Confirm
+    SEND_MODE_STR,
+    WAIT_MODE_STR,
+    DEBOUNCE_ENTRY,
+    SELECT_OP,  // Wait for SW selection & Confirm
 
     // Interaction Flow (Replaces SELECT_A/B)
     SEL_SHOW_SUM,  // Request Display Summary
@@ -95,7 +106,8 @@ module matrix_calc_sys (
 
     // Auto Select
     AUTO_SEARCH_B,
-    AUTO_WAIT_B,
+    AUTO_WAIT_MEM,
+    AUTO_CHECK,
 
     // New States for Confirmation
     PRINT_A,
@@ -126,6 +138,7 @@ module matrix_calc_sys (
   reg [MAT_ID_W-1:0] id_a_reg;
   reg [MAT_ID_W-1:0] id_b_reg;
   reg [MAT_ID_W-1:0] search_id;
+  reg [7:0] scalar_latch;
   reg [31:0] err_timer;  // Enough for 5s
   reg [3:0] err_countdown_val;  // For 10s countdown
 
@@ -153,7 +166,8 @@ module matrix_calc_sys (
   assign alu_id_A = id_a_reg;
   assign alu_id_B = id_b_reg;
   // Scalar Conversion: Sign-Magnitude (SW) -> Two's Complement (ALU)
-  assign alu_scalar_out = scalar_val_in[7] ? (8'd0 - {1'b0, scalar_val_in[6:0]}) : {1'b0, scalar_val_in[6:0]};
+  // Use latched scalar value
+  assign alu_scalar_out = scalar_latch[7] ? (8'd0 - {1'b0, scalar_latch[6:0]}) : {1'b0, scalar_latch[6:0]};
 
   // --- Validation Logic ---
   function automatic logic check_validity();
@@ -175,6 +189,8 @@ module matrix_calc_sys (
       calc_sys_done <= 0;
       alu_start <= 0;
       printer_start <= 0;
+      sender_str <= 0;
+      sender_str_id <= 0;
       calc_err <= 0;
       err_timer <= 0;
       btn_confirm_prev <= 0;
@@ -198,31 +214,43 @@ module matrix_calc_sys (
       // Pulse Reset
       alu_start <= 0;
       printer_start <= 0;
+      sender_str <= 0;
       calc_sys_done <= 0;
 
       case (state)
         IDLE: begin
-          if (start_en) begin
-            // Wait for button release STABLY before accepting new input
-            // Fix: Add debounce for release to prevent false triggering on bounce
-            if (btn_confirm) begin
-              err_timer <= 0;  // Reset timer if button is pressed (or bouncing high)
-            end else begin
-              if (err_timer < 10000) begin  // Wait ~100us (100MHz * 10000 = 100us)
-                err_timer <= err_timer + 1;
-              end else begin
-                state <= SELECT_OP;
-                err_timer <= 0;
-              end
-            end
-          end else begin
-            err_timer <= 0;
-          end
+          if (start_en) state <= SEND_MODE_STR;
+          err_timer <= 0;
           seg_content <= {
             CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK
           };
           calc_err <= 0;
           disp_req_en <= 0;
+        end
+
+        SEND_MODE_STR: begin
+          if (sender_ready) begin
+            sender_str <= 1;
+            sender_str_id <= 3'd2;  // mode-cal
+            state <= WAIT_MODE_STR;
+          end
+        end
+
+        WAIT_MODE_STR: begin
+          if (sender_done) state <= DEBOUNCE_ENTRY;
+        end
+
+        DEBOUNCE_ENTRY: begin
+          if (btn_confirm) begin
+            err_timer <= 0;  // Reset timer if button is pressed (or bouncing high)
+          end else begin
+            if (err_timer < 10000) begin  // Wait ~100us (100MHz * 10000 = 100us)
+              err_timer <= err_timer + 1;
+            end else begin
+              state <= SELECT_OP;
+              err_timer <= 0;
+            end
+          end
         end
 
         // 1. Select Operation
@@ -300,6 +328,10 @@ module matrix_calc_sys (
               target_op <= 0;
               state <= SEL_SHOW_SUM;
             end else state <= SELECT_OP;
+          end else if (btn_pos_confirm && target_op == 1 && scalar_val_in == 0) begin
+            // Auto Select B
+            search_id <= 0;
+            state <= AUTO_SEARCH_B;
           end else if (rx_done && rx_valid_char) begin
             // Store M (1-based index)
             // Note: User inputs Raw Hex (0x01-0x05)
@@ -384,11 +416,15 @@ module matrix_calc_sys (
         // Auto Search Logic
         AUTO_SEARCH_B: begin
           id_b_reg <= search_id;
-          state <= AUTO_WAIT_B;
+          state <= AUTO_WAIT_MEM;
         end
 
-        AUTO_WAIT_B: begin
+        AUTO_WAIT_MEM: begin
           // Wait for memory read (1 cycle passed since AUTO_SEARCH_B)
+          state <= AUTO_CHECK;
+        end
+
+        AUTO_CHECK: begin
           // Check validity
           if (mat_b_valid && check_validity()) begin
             // Found valid B
@@ -478,6 +514,12 @@ module matrix_calc_sys (
           if (btn_pos_esc) state <= SEL_SHOW_SUM;
           else if (btn_pos_confirm) begin
             // Scalar val is read directly from system_core wires by ALU
+            if (scalar_val_in == 0) begin
+              // Use Random 0-9
+              scalar_latch <= rand_val % 10;
+            end else begin
+              scalar_latch <= scalar_val_in;
+            end
             state <= PRINT_A;
           end
         end

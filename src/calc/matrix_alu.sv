@@ -453,13 +453,6 @@ module matrix_alu (
               end
             end
 
-            // New State: Accumulate
-            ALU_ACCUM: begin
-              accum <= accum + mul_res_reg;
-              cnt_k <= cnt_k + 1;
-              state <= ALU_EXEC;
-            end
-
             // --- Complex Operation: Convolution (Pipelined Streaming) ---
             OP_CONV: begin
               if (cnt_k == limit_k) begin
@@ -495,6 +488,15 @@ module matrix_alu (
 
             default: state <= ALU_DONE;
           endcase
+        end
+
+        // ------------------------------------------------------------
+        // 2.5 ACCUMULATE (New State)
+        // ------------------------------------------------------------
+        ALU_ACCUM: begin
+          accum <= accum + mul_res_reg;
+          cnt_k <= cnt_k + 1;
+          state <= ALU_EXEC;
         end
 
         // ------------------------------------------------------------

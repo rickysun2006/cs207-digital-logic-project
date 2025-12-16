@@ -37,6 +37,11 @@ module settings_sys (
     output reg        [PTR_W-1:0] cfg_active_limit,
     output reg                    settings_done,
 
+    output reg        sender_str,
+    output reg  [2:0] sender_str_id,
+    input  wire       sender_done,
+    input  wire       sender_ready,
+
     // --- Display Interface ---
     output code_t [7:0] seg_data,
     output reg    [7:0] seg_blink
@@ -51,6 +56,8 @@ module settings_sys (
   // --- States ---
   typedef enum logic [2:0] {
     IDLE,
+    WAIT_MODE_STR,
+    SET_MENU,
     SET_ERR_TIME,
     SET_MAX_VAL,
     SET_MIN_VAL,
@@ -78,6 +85,8 @@ module settings_sys (
       cfg_val_min <= DEFAULT_VAL_MIN_INIT;
       cfg_active_limit <= DEFAULT_LIMIT_INIT;
       settings_done <= 0;
+      sender_str <= 0;
+      sender_str_id <= 0;
       btn_confirm_prev <= 0;
       btn_esc_prev <= 0;
       seg_content <= {8{CHAR_BLK}};
@@ -88,10 +97,24 @@ module settings_sys (
       if (!start_en) begin
         state <= IDLE;
         settings_done <= 0;
+        sender_str <= 0;
         seg_content <= {8{CHAR_BLK}};
       end else begin
+        sender_str <= 0;
         case (state)
           IDLE: begin
+            if (sender_ready) begin
+              sender_str <= 1;
+              sender_str_id <= 3'd4;  // mode-set
+              state <= WAIT_MODE_STR;
+            end
+          end
+
+          WAIT_MODE_STR: begin
+            if (sender_done) state <= SET_MENU;
+          end
+
+          SET_MENU: begin
             // Display "SEt"
             seg_content <= {
               CHAR_S, CHAR_E, CHAR_T, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK, CHAR_BLK

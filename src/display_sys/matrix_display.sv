@@ -47,15 +47,17 @@ module matrix_display (
     input wire [3:0] type_valid_cnt  [0:MAT_SIZE_CNT-1],
 
     // --- Sender 接口 ---
-    output matrix_element_t sender_data,
-    output reg              sender_start,
-    output reg              sender_is_last_col,
-    output reg              sender_newline_only,
-    output reg              sender_id,            // 输出 ID 模式
-    output reg              sender_sum_head,      // 输出表头模式
-    output reg              sender_sum_elem,      // 输出表格行模式
-    input  wire             sender_done,
-    input  wire             sender_ready,
+    output matrix_element_t       sender_data,
+    output reg                    sender_start,
+    output reg                    sender_is_last_col,
+    output reg                    sender_newline_only,
+    output reg                    sender_id,            // 输出 ID 模式
+    output reg                    sender_sum_head,      // 输出表头模式
+    output reg                    sender_sum_elem,      // 输出表格行模式
+    output reg                    sender_str,           // 输出字符串模式
+    output reg              [2:0] sender_str_id,        // 字符串 ID
+    input  wire                   sender_done,
+    input  wire                   sender_ready,
 
     // --- 状态指示 ---
     output reg  display_done,   // 退出 Display 模式信号
@@ -81,7 +83,9 @@ module matrix_display (
   // --- 状态定义 ---
   typedef enum logic [4:0] {
     IDLE,
-    EXIT_WAIT, // 等待 start_en 拉低
+    SEND_MODE_STR,  // New: Send mode string first
+    WAIT_MODE_STR,  // New: Wait for string sent
+    EXIT_WAIT,  // 等待 start_en 拉低
 
     // --- Summary 阶段 ---
     SUM_HEAD,           // 打印总数+表头
@@ -157,6 +161,8 @@ module matrix_display (
       sender_sum_head <= 0;
       sender_sum_elem <= 0;
       sender_is_last_col <= 0;
+      sender_str <= 0;
+      sender_str_id <= 0;
     end else begin
       // Pulse 复位
       sender_start <= 0;
@@ -165,13 +171,16 @@ module matrix_display (
       sender_sum_elem <= 0;
       sender_id <= 0;
       sender_is_last_col <= 0;
+      sender_str <= 0;
       display_done <= 0;
       ext_done <= 0;
 
       case (state)
         IDLE: begin
-          if (start_en) state <= SUM_HEAD;
-          else if (ext_en) begin
+          if (start_en) begin
+            // Start by sending mode string
+            state <= SEND_MODE_STR;
+          end else if (ext_en) begin
             if (ext_cmd == 1) begin
               state <= SUM_HEAD;
               scan_idx <= 0;
@@ -184,6 +193,21 @@ module matrix_display (
               rd_id <= {ext_m, ext_n};
               state <= DET_READ_RAM;
             end
+          end
+        end
+
+        SEND_MODE_STR: begin
+          if (sender_ready) begin
+            sender_str <= 1;
+            sender_str_id <= 3;  // "mode-dis"
+            state <= WAIT_MODE_STR;
+          end
+        end
+
+        WAIT_MODE_STR: begin
+          if (sender_done) begin
+            state <= SUM_HEAD;
+            scan_idx <= 0;
           end
         end
 

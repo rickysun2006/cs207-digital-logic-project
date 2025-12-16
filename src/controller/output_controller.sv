@@ -67,6 +67,18 @@ module output_controller (
     input wire                            inp_sender_id,
     input wire             [MAT_ID_W-1:0] inp_rd_id,
 
+    // --- Mode String Inputs ---
+    input wire       inp_send_str,
+    input wire       gen_send_str,
+    input wire       disp_send_str,
+    input wire       calc_send_str,
+    input wire       set_send_str,
+    input wire [2:0] inp_str_id,
+    input wire [2:0] gen_str_id,
+    input wire [2:0] disp_str_id,
+    input wire [2:0] calc_str_id,
+    input wire [2:0] set_str_id,
+
     // --- Destination 1: To UART Sender ---
     output reg                 mux_sender_start,
     output logic signed [31:0] mux_sender_data,
@@ -75,6 +87,8 @@ module output_controller (
     output reg                 mux_sender_id,
     output reg                 mux_sender_sum_head,
     output reg                 mux_sender_sum_elem,
+    output reg                 mux_sender_str,
+    output reg          [ 2:0] mux_sender_str_id,
 
     // --- Destination 2: To Matrix Storage (Read Port A) ---
     output reg [MAT_ID_W-1:0] mux_rd_id_A
@@ -89,6 +103,8 @@ module output_controller (
     mux_sender_id       = 0;
     mux_sender_sum_head = 0;
     mux_sender_sum_elem = 0;
+    mux_sender_str      = 0;
+    mux_sender_str_id   = 0;
 
     // 默认读地址给 ALU (优先级最低，或者默认状态)
     mux_rd_id_A         = alu_rd_id_A;
@@ -104,6 +120,8 @@ module output_controller (
         mux_sender_newline  = inp_sender_newline;
         mux_sender_id       = inp_sender_id;
         mux_rd_id_A         = inp_rd_id;
+        mux_sender_str      = inp_send_str;
+        mux_sender_str_id   = inp_str_id;
       end
 
       // --------------------------------------------------------
@@ -114,7 +132,8 @@ module output_controller (
         mux_sender_data     = 32'(signed'(gen_sender_data));
         mux_sender_last_col = gen_sender_last_col;
         mux_sender_newline  = gen_sender_newline;
-        // Gen 模式下通常不读 RAM (它是写的)，也不用高级格式
+        mux_sender_str      = gen_send_str;
+        mux_sender_str_id   = gen_str_id;
       end
 
       // --------------------------------------------------------
@@ -128,6 +147,8 @@ module output_controller (
         mux_sender_id       = disp_sender_id;
         mux_sender_sum_head = disp_sender_sum_head;
         mux_sender_sum_elem = disp_sender_sum_elem;
+        mux_sender_str      = disp_send_str;
+        mux_sender_str_id   = disp_str_id;
 
         // Display 模式需要控制读端口
         mux_rd_id_A         = disp_rd_id;
@@ -162,6 +183,16 @@ module output_controller (
           mux_sender_last_col = res_sender_last_col;
           mux_sender_newline  = res_sender_newline;
         end
+        mux_sender_str    = calc_send_str;
+        mux_sender_str_id = calc_str_id;
+      end
+
+      // --------------------------------------------------------
+      // Mode 4: Settings
+      // --------------------------------------------------------
+      STATE_SETTINGS: begin
+        mux_sender_str    = set_send_str;
+        mux_sender_str_id = set_str_id;
       end
 
       default: ;

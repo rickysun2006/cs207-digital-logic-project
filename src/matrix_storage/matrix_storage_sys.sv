@@ -168,6 +168,7 @@ module matrix_manage_sys (
         new_mat = '0;
         new_mat.rows = wr_dims_r_reg;
         new_mat.cols = wr_dims_c_reg;
+        new_mat.is_valid = 1'b1;
         storage[calc_target] <= new_mat;
 
         // Update Counters

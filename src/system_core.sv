@@ -110,6 +110,8 @@ module system_core (
   matrix_element_t inp_snd_data;
   logic inp_snd_last, inp_snd_nl, inp_snd_id;
   logic  [MAT_ID_W-1:0] inp_rd_id;
+  logic                 inp_send_str;
+  logic  [         2:0] inp_str_id;
   // Seg (Not used in controller yet, place holder)
   code_t [         7:0] inp_seg_d;
   logic  [         7:0] inp_seg_b;
@@ -119,10 +121,11 @@ module system_core (
   logic [ROW_IDX_W-1:0] gen_wr_dim_r, gen_wr_row;
   logic [COL_IDX_W-1:0] gen_wr_dim_c, gen_wr_col;
   matrix_element_t gen_wr_data;
-  // Gen Sender
   logic            gen_snd_start;
   matrix_element_t gen_snd_data;
   logic gen_snd_last, gen_snd_nl;
+  logic                           gen_send_str;
+  logic            [         2:0] gen_str_id;
   // Seg
   code_t           [         7:0] gen_seg_d;
   logic            [         7:0] gen_seg_b;
@@ -134,6 +137,8 @@ module system_core (
   matrix_element_t                disp_snd_data;
   logic disp_snd_last, disp_snd_nl, disp_snd_id;
   logic disp_snd_head, disp_snd_elem;
+  logic           disp_send_str;
+  logic     [2:0] disp_str_id;
   // Seg
   code_t    [7:0] disp_seg_d;
   logic     [7:0] disp_seg_b;
@@ -145,6 +150,10 @@ module system_core (
   logic                   sys_calc_err;
   logic                   sys_calc_print_start;
   matrix_element_t        sys_calc_scalar_val;  // Converted scalar value from Calc Sys
+  logic                   calc_send_str;
+  logic            [ 2:0] calc_str_id;
+  logic                   set_send_str;
+  logic            [ 2:0] set_str_id;
   // Seg
   code_t           [ 7:0] calc_seg_d;
   logic            [ 7:0] calc_seg_b;
@@ -186,6 +195,8 @@ module system_core (
   logic mux_tx_last, mux_tx_nl;
   logic mux_tx_id;
   logic mux_tx_head, mux_tx_elem;
+  logic mux_tx_str;
+  logic [2:0] mux_tx_str_id;
 
   // --- Random Number ---
   logic [7:0] rand_val;
@@ -264,6 +275,10 @@ module system_core (
       .cfg_val_max(cfg_val_max),
       .cfg_active_limit(cfg_active_limit),
       .settings_done(settings_done),
+      .sender_str(set_send_str),
+      .sender_str_id(set_str_id),
+      .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
       .seg_data(set_seg_d),
       .seg_blink(set_seg_b)
   );
@@ -279,6 +294,8 @@ module system_core (
       .cfg_val_min(cfg_val_min),
       .cfg_val_max(cfg_val_max),
       .err(inp_err),
+      .sender_str(inp_send_str),
+      .sender_str_id(inp_str_id),
       // Storage Write
       .wr_cmd_new(inp_wr_new),
       .wr_cmd_single(inp_wr_single),
@@ -315,6 +332,8 @@ module system_core (
       // Sender
       .sender_data(gen_snd_data),
       .sender_start(gen_snd_start),
+      .sender_str(gen_send_str),
+      .sender_str_id(gen_str_id),
       .sender_is_last_col(gen_snd_last),
       .sender_newline_only(gen_snd_nl),
       .sender_done(sender_done),
@@ -333,7 +352,8 @@ module system_core (
 
       // Control Signals
       .btn_exit_gen(btn_esc),
-      .gen_done(gen_done)
+      .gen_done(gen_done),
+      .gen_err(gen_err)
   );
 
   // --- Matrix Display ---
@@ -364,6 +384,8 @@ module system_core (
       // Sender
       .sender_data(disp_snd_data),
       .sender_start(disp_snd_start),
+      .sender_str(disp_send_str),
+      .sender_str_id(disp_str_id),
       .sender_is_last_col(disp_snd_last),
       .sender_newline_only(disp_snd_nl),
       .sender_id(disp_snd_id),
@@ -392,6 +414,11 @@ module system_core (
       .rx_data(rx_byte),
       .rx_done(rx_valid),
 
+      .sender_str(calc_send_str),
+      .sender_str_id(calc_str_id),
+      .sender_done(sender_done),
+      .sender_ready(uart_sender_ready),
+
       // Matrix Dimensions for Validation
       .mat_a_rows (ms_rd_data_A.rows),
       .mat_a_cols (ms_rd_data_A.cols),
@@ -400,6 +427,7 @@ module system_core (
       .mat_b_valid(ms_rd_data_B.is_valid),
 
       .cfg_err_countdown(cfg_err_countdown),
+      .rand_val(rand_val),
 
       // Display Slave Control
       .disp_req_en(disp_ext_en),
@@ -555,6 +583,18 @@ module system_core (
       // Source: Calc Sys (Operand Select)
       .alu_rd_id_A(sys_calc_id_A),
 
+      // Mode String Inputs
+      .inp_send_str(inp_send_str),
+      .gen_send_str(gen_send_str),
+      .disp_send_str(disp_send_str),
+      .calc_send_str(calc_send_str),
+      .set_send_str(set_send_str),
+      .inp_str_id(inp_str_id),
+      .gen_str_id(gen_str_id),
+      .disp_str_id(disp_str_id),
+      .calc_str_id(calc_str_id),
+      .set_str_id(set_str_id),
+
       // Dest: Sender
       .mux_sender_start(mux_tx_start),
       .mux_sender_data(mux_tx_data),
@@ -563,6 +603,8 @@ module system_core (
       .mux_sender_id(mux_tx_id),
       .mux_sender_sum_head(mux_tx_head),
       .mux_sender_sum_elem(mux_tx_elem),
+      .mux_sender_str(mux_tx_str),
+      .mux_sender_str_id(mux_tx_str_id),
 
       // Dest: Storage Read A
       .mux_rd_id_A(ms_rd_id_A)
@@ -596,6 +638,10 @@ module system_core (
       .type_valid_cnt(type_valid_cnt)
   );
 
+  // --- Mode String Logic ---
+  // Removed centralized logic to avoid conflicts.
+  // Each module now handles its own mode string transmission.
+
   matrix_uart_sender u_uart_sender (
       .clk(clk),
       .rst_n(rst_n),
@@ -606,6 +652,8 @@ module system_core (
       .send_id(mux_tx_id),
       .send_summary_head(mux_tx_head),
       .send_summary_elem(mux_tx_elem),
+      .send_str(mux_tx_str),
+      .str_id(mux_tx_str_id),
       .sender_done(sender_done),
 
       .tx_data (tx_byte),
@@ -621,7 +669,7 @@ module system_core (
   // --- LED Controller ---
   led_controller u_led_ctrl (
       .current_state(current_state),
-      .inp_err(inp_err),
+      .inp_err(inp_err | gen_err),
       .alu_err(sys_calc_err),  // Connect Calc Sys error
       .ext_led_mask(8'h00),
       .led_status(led_status)

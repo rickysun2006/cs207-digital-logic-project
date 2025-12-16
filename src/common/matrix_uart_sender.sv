@@ -35,6 +35,9 @@ module matrix_uart_sender (
     input logic send_summary_head,  // 发送总数+表头
     input logic send_summary_elem,  // 发送表格元素
 
+    input logic       send_str,  // New: Send String Mode
+    input logic [2:0] str_id,    // New: String ID (0:Inp, 1:Gen, 2:Cal, 3:Dis, 4:Set)
+
     output logic sender_done,
 
     // --- UART 物理接口 ---
@@ -71,6 +74,8 @@ module matrix_uart_sender (
     SUM_PRINT_BORDER,
     SUM_END_PIPE,
     SUM_NL_3,
+    SEND_STR_INIT,     // New
+    SEND_STR_LOOP,     // New
     SEND_END,
     WAIT_TX
   } state_t;
@@ -79,6 +84,8 @@ module matrix_uart_sender (
 
   // --- 内部寄存器 ---
   logic [4:0] char_count;
+  logic [4:0] str_idx;  // New: String Index
+  logic [7:0] str_char;  // New: Current Char
   logic signed [31:0] data_latched;
   logic [31:0] abs_val;
   logic is_negative;
@@ -95,6 +102,8 @@ module matrix_uart_sender (
   // 模式寄存器 (锁存当前请求类型)
   logic mode_sum_head, mode_sum_elem;
   logic mode_last_col, mode_send_id;
+  logic mode_send_str;  // New
+  logic [2:0] mode_str_id;  // New
 
   // --- 查找表：边框 ---
   function logic [7:0] get_border_char(input integer idx);
@@ -133,6 +142,80 @@ module matrix_uart_sender (
     endcase
   endfunction
 
+  // --- 查找表：模式字符串 ---
+  function logic [7:0] get_mode_str_char(input logic [2:0] id, input integer idx);
+    // "mode-inp\n", "mode-gen\n", "mode-cal\n", "mode-dis\n", "mode-set\n"
+    // Length is 9 chars (including \n)
+    case (id)
+      0:
+      case (idx)  // inp
+        0: return "m";
+        1: return "o";
+        2: return "d";
+        3: return "e";
+        4: return "-";
+        5: return "i";
+        6: return "n";
+        7: return "p";
+        8: return 8'h0A;
+        default: return 0;
+      endcase
+      1:
+      case (idx)  // gen
+        0: return "m";
+        1: return "o";
+        2: return "d";
+        3: return "e";
+        4: return "-";
+        5: return "g";
+        6: return "e";
+        7: return "n";
+        8: return 8'h0A;
+        default: return 0;
+      endcase
+      2:
+      case (idx)  // cal
+        0: return "m";
+        1: return "o";
+        2: return "d";
+        3: return "e";
+        4: return "-";
+        5: return "c";
+        6: return "a";
+        7: return "l";
+        8: return 8'h0A;
+        default: return 0;
+      endcase
+      3:
+      case (idx)  // dis
+        0: return "m";
+        1: return "o";
+        2: return "d";
+        3: return "e";
+        4: return "-";
+        5: return "d";
+        6: return "i";
+        7: return "s";
+        8: return 8'h0A;
+        default: return 0;
+      endcase
+      4:
+      case (idx)  // set
+        0: return "m";
+        1: return "o";
+        2: return "d";
+        3: return "e";
+        4: return "-";
+        5: return "s";
+        6: return "e";
+        7: return "t";
+        8: return 8'h0A;
+        default: return 0;
+      endcase
+      default: return 0;
+    endcase
+  endfunction
+
   assign div_temp_rem = {div_remainder[3:0], abs_val[div_cnt]};
 
   // --- 状态机 ---
@@ -156,16 +239,20 @@ module matrix_uart_sender (
         IDLE: begin
           char_count <= 0;
 
-          if (start || send_summary_head || send_summary_elem || send_newline) begin
+          if (start || send_summary_head || send_summary_elem || send_newline || send_str) begin
             // 锁存数据与模式
             data_latched  <= data_in;
             mode_sum_head <= send_summary_head;
             mode_sum_elem <= send_summary_elem;
             mode_last_col <= is_last_col;
             mode_send_id  <= send_id;
+            mode_send_str <= send_str;
+            mode_str_id   <= str_id;
 
             // 优先级判断
-            if (send_newline) begin
+            if (send_str) begin
+              state <= SEND_STR_INIT;
+            end else if (send_newline) begin
               state <= SEND_END;
               return_state <= IDLE;
             end else if (send_summary_head) begin
@@ -382,6 +469,29 @@ module matrix_uart_sender (
           state <= WAIT_TX;
           return_state <= SUM_PRINT_BORDER;
           next_state <= IDLE;  // Border 发完发换行然后结束
+        end
+
+        // ========================
+        // 字符串发送序列
+        // ========================
+        SEND_STR_INIT: begin
+          str_idx <= 0;
+          state   <= SEND_STR_LOOP;
+        end
+
+        SEND_STR_LOOP: begin
+          str_char = get_mode_str_char(mode_str_id, str_idx);
+          if (str_char != 0) begin
+            tx_data <= str_char;
+            tx_start <= 1;
+            str_idx <= str_idx + 1;
+            state <= WAIT_TX;
+            return_state <= SEND_STR_LOOP;
+          end else begin
+            // End of string
+            state <= IDLE;
+            sender_done <= 1;
+          end
         end
 
         // ========================

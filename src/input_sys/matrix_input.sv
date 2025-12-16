@@ -39,6 +39,9 @@ module matrix_input (
     // --- 报错 ---
     output reg err,
 
+    output reg       sender_str,
+    output reg [2:0] sender_str_id,
+
     // --- 写入存储接口 ---
     output reg wr_cmd_new,
     output reg wr_cmd_single,
@@ -100,7 +103,9 @@ module matrix_input (
     ECHO_GAP,
 
     ERROR_STATE,
-    DONE
+    DONE,
+    SEND_MODE_STR,
+    WAIT_MODE_STR
   } state_t;
 
   state_t state, next_state;
@@ -134,7 +139,10 @@ module matrix_input (
   always_comb begin
     next_state = state;
     case (state)
-      IDLE: if (start_en) next_state = GET_M;
+      IDLE: if (start_en) next_state = SEND_MODE_STR;
+
+      SEND_MODE_STR: if (sender_ready) next_state = WAIT_MODE_STR;
+      WAIT_MODE_STR: if (sender_done) next_state = GET_M;
 
       GET_M: begin
         if (btn_exit_input) next_state = DONE;
@@ -225,6 +233,8 @@ module matrix_input (
 
       // Sender Reset
       sender_start <= 0;
+      sender_str <= 0;
+      sender_str_id <= 0;
       sender_is_last_col <= 0;
       sender_newline_only <= 0;
       sender_id <= 0;
@@ -237,6 +247,7 @@ module matrix_input (
 
       // Pulse Reset
       sender_start <= 0;
+      sender_str <= 0;
       sender_newline_only <= 0;
       sender_id <= 0;
       sender_is_last_col <= 0;
@@ -256,6 +267,13 @@ module matrix_input (
           cnt_n <= 0;
           err <= 0;
           is_padding_mode <= 0;
+        end
+
+        SEND_MODE_STR: begin
+          if (sender_ready) begin
+            sender_str <= 1;
+            sender_str_id <= 3'd0;  // mode-inp
+          end
         end
 
         GET_M: if (rx_done && next_state == GET_N) wr_dims_r <= rx_val_decoded[ROW_IDX_W-1:0];

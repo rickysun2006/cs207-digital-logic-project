@@ -29,7 +29,7 @@ class DisplayMode(ft.Container):
             title="Statistics", icon=ft.Icons.ANALYTICS,
             expand=True,
             content=ft.Column([
-                ft.ElevatedButton("Refresh Stats", icon=ft.Icons.REFRESH, on_click=self.request_stats, width=1000),
+                # ft.ElevatedButton("Refresh Stats", icon=ft.Icons.REFRESH, on_click=self.request_stats, width=1000),
                 ft.Container(content=self.stats_list, expand=True, bgcolor="background", border_radius=8, padding=5)
             ], expand=True)
         )

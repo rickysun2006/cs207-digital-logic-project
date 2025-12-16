@@ -132,6 +132,7 @@ def main(page: ft.Page):
             # Reset state if needed
             if new_mode == "dis":
                 display_mode.parsing_table = False # Reset table parser
+                display_mode.request_stats()       # Auto-refresh stats on entry
 
     def process_line(line):
         line = line.strip()

@@ -620,9 +620,9 @@ def main(page: ft.Page):
         if not serial_manager.is_connected:
             page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
-        # Send '00 00'
-        if serial_manager.send_bytes(b'00 00'):
-            log("Sent Storage Refresh (00 00)", "tx")
+        # Send 0x00 0x00 (Row=0, Col=0)
+        if serial_manager.send_bytes(bytes([0, 0])):
+            log("Sent Storage Refresh (0x00 0x00)", "tx")
         else:
             log("Cannot send: Disconnected", "error")
 

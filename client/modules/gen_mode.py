@@ -60,11 +60,12 @@ class GenMode(ft.Container):
             self.gen_n = n
             self.gen_k = k
             
-            msg = f"{m} {n} {k}"
-            self.serial.send_string(msg)
+            # Send as binary bytes: m, n, k
+            self.serial.send_bytes(bytes([m, n, k]))
             
             self.matrices_to_receive = k
-            self.current_matrix_lines_left = 0 # Will be set when ID arrives
+            self.current_matrix_lines_left = m # Start expecting rows immediately
+            self.current_matrix_buffer = []
             self.results_list.controls.append(ft.Text(f"--- Requesting {k} matrices of {m}x{n} ---", italic=True))
             self.results_list.update()
             
@@ -75,29 +76,28 @@ class GenMode(ft.Container):
         if self.matrices_to_receive <= 0:
             return
 
+        # Directly collect matrix rows (No ID line)
+        self.current_matrix_buffer.append(line)
+        self.current_matrix_lines_left -= 1
+        
         if self.current_matrix_lines_left == 0:
-            # This line is the ID
-            self.current_id = line.strip()
+            # Matrix complete
+            # Do not generate ID as per user request
+            self.add_matrix_to_ui(self.current_matrix_buffer)
+            
+            self.matrices_to_receive -= 1
             self.current_matrix_buffer = []
             self.current_matrix_lines_left = self.gen_m
-        else:
-            # This line is a matrix row
-            self.current_matrix_buffer.append(line)
-            self.current_matrix_lines_left -= 1
             
-            if self.current_matrix_lines_left == 0:
-                # Matrix complete
-                self.add_matrix_to_ui(self.current_id, self.current_matrix_buffer)
-                self.matrices_to_receive -= 1
-                if self.matrices_to_receive == 0:
-                    self.results_list.controls.append(ft.Text("--- Generation Complete ---", color="green"))
-                    self.results_list.update()
+            if self.matrices_to_receive == 0:
+                self.results_list.controls.append(ft.Text("--- Generation Complete ---", color="green"))
+                self.results_list.update()
 
-    def add_matrix_to_ui(self, mid, lines):
+    def add_matrix_to_ui(self, lines):
         text_block = "\n".join(lines)
         card = ft.Container(
             content=ft.Column([
-                ft.Text(f"Matrix ID: {mid}", weight=ft.FontWeight.BOLD),
+                # ft.Text(f"Matrix ID: {mid}", weight=ft.FontWeight.BOLD), # Removed ID display
                 ft.Text(text_block, font_family="Consolas", size=14)
             ]),
             bgcolor="surface",

@@ -118,6 +118,9 @@ def main(page: ft.Page):
 
     def switch_mode(new_mode):
         nonlocal current_mode_key
+        if current_mode_key == new_mode:
+            return
+            
         if new_mode in modes:
             current_mode_key = new_mode
             mode_container.content = modes[new_mode]

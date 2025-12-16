@@ -44,22 +44,20 @@ class DisplayMode(ft.Container):
 
     def request_stats(self, e=None):
         if self.serial.is_connected:
-            self.serial.send_string("00")
+            # Send 0x00 0x00 as binary
+            self.serial.send_bytes(bytes([0, 0]))
             self.stats_list.controls.clear()
-            self.parsing_table = True
+            self.parsing_table = False
             self.table_lines = []
             self.update()
 
     def request_matrices(self, m, n, count):
         if self.serial.is_connected:
-            # Convert dimensions to Hex string (e.g. 10 -> "0A")
-            # User requirement: "convert the matrix id entered by the user into hexadecimal"
-            # Assuming 'matrix id' refers to the selection parameters m and n.
-            msg = f"{m:02X} {n:02X}"
-            self.serial.send_string(msg)
+            # Send m, n as binary bytes
+            self.serial.send_bytes(bytes([m, n]))
             
             self.matrix_view.controls.clear()
-            self.matrix_view.controls.append(ft.Text(f"Fetching {count} matrices of size {m}x{n} (Sent: {msg})...", italic=True))
+            self.matrix_view.controls.append(ft.Text(f"Fetching {count} matrices of size {m}x{n} (Sent: {m:02X} {n:02X})...", italic=True))
             self.matrix_view.update()
             
             self.waiting_matrices_count = count
@@ -70,6 +68,10 @@ class DisplayMode(ft.Container):
     def handle_line(self, line):
         # Check if it's a table line
         if "+----" in line:
+            if not self.parsing_table:
+                # New table started, clear previous stats to prevent duplication
+                self.stats_list.controls.clear()
+                self.update()
             self.parsing_table = True
             return
         
@@ -81,16 +83,17 @@ class DisplayMode(ft.Container):
             if match:
                 m, n, cnt = map(int, match.groups())
                 self.add_stat_item(m, n, cnt)
+                return
             else:
-                # If line doesn't match and doesn't look like table border, maybe table ended?
-                # But for now we just parse what we can.
-                pass
-            return
+                # If line doesn't match and doesn't look like table border, table ended.
+                # Stop parsing table and fall through to matrix parsing
+                self.parsing_table = False
 
         # If not parsing table, maybe we are receiving matrices?
         if self.waiting_matrices_count > 0:
             if self.current_matrix_lines_left == 0:
                 # Expecting ID
+                if not line.strip(): return # Skip empty lines between matrices
                 self.current_id = line.strip()
                 self.current_matrix_buffer = []
                 self.current_matrix_lines_left = self.current_req_m

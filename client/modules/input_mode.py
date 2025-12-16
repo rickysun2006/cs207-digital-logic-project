@@ -69,9 +69,11 @@ class InputMode(ft.Container):
             return
         
         values = self.input_grid.get_values()
-        # Format: m n v1 v2 ...
-        msg = f"{self.current_rows} {self.current_cols} " + " ".join(map(str, values))
-        self.serial.send_string(msg)
+        # Format: m n v1 v2 ... (Binary)
+        payload = [self.current_rows, self.current_cols] + values
+        # Convert to bytes, handling potential negative numbers or overflows by masking
+        payload_bytes = bytes([x & 0xFF for x in payload])
+        self.serial.send_bytes(payload_bytes)
         
         # Prepare to receive response
         self.expecting_response = True

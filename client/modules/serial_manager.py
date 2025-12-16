@@ -45,12 +45,9 @@ class SerialManager:
         if self.ser and self.ser.is_open:
             self.ser.write(data)
             if self.on_data_sent:
-                try:
-                    # Try to decode for logging, fallback to hex if binary
-                    text = data.decode('utf-8')
-                    self.on_data_sent(text)
-                except:
-                    self.on_data_sent(f"HEX: {data.hex()}")
+                # Always log as HEX for clarity as requested
+                hex_str = " ".join([f"{b:02X}" for b in data])
+                self.on_data_sent(hex_str)
             return True
         return False
 

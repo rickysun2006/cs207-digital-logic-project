@@ -111,9 +111,10 @@ class StyledCard(ft.Container):
         self.content = inner_col
 
 class MatrixInput(ft.Column):
-    def __init__(self, on_send):
+    def __init__(self, on_send, app_config):
         super().__init__()
         self.on_send = on_send
+        self.app_config = app_config
         self.spacing = 20
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         
@@ -166,6 +167,25 @@ class MatrixInput(ft.Column):
             border_color=ft.Colors.PRIMARY,
         )
 
+    def validate_cell(self, e):
+        tf = e.control
+        try:
+            val = int(tf.value)
+            mn = self.app_config["min_val"]
+            mx = self.app_config["max_val"]
+            if val < mn or val > mx:
+                tf.border_color = ft.Colors.RED
+                tf.update()
+                return False
+            else:
+                tf.border_color = ft.Colors.OUTLINE
+                tf.update()
+                return True
+        except ValueError:
+            tf.border_color = ft.Colors.RED
+            tf.update()
+            return False
+
     def update_grid(self, e):
         try:
             r = int(self.rows_field.value)
@@ -173,7 +193,7 @@ class MatrixInput(ft.Column):
             # FPGA MAX_ROWS/COLS is 5. Limit UI to 5 to prevent Error State.
             if r > 5 or c > 5: 
                 if self.page:
-                    self.page.show_snack_bar(ft.SnackBar(content=ft.Text("Max dimensions are 5x5"), bgcolor="red"))
+                    self.page.open(ft.SnackBar(content=ft.Text("Max dimensions are 5x5"), bgcolor="red"))
                 return
         except:
             return
@@ -195,6 +215,7 @@ class MatrixInput(ft.Column):
                     bgcolor=ft.Colors.SURFACE, # 动态背景
                     border_color=ft.Colors.OUTLINE,
                     focused_border_color=ft.Colors.PRIMARY,
+                    on_change=self.validate_cell
                 )
                 row_inputs.append(tf)
                 row_controls.append(tf)
@@ -210,81 +231,27 @@ class MatrixInput(ft.Column):
             r = int(self.rows_field.value)
             c = int(self.cols_field.value)
             data = []
+            mn = self.app_config["min_val"]
+            mx = self.app_config["max_val"]
+            
             for i in range(r):
                 for j in range(c):
-                    val = int(self.inputs[i][j].value)
-                    data.append(val & 0xFF)
+                    val_str = self.inputs[i][j].value
+                    try:
+                        val = int(val_str)
+                        if val < mn or val > mx:
+                            raise ValueError(f"Value {val} out of range [{mn}, {mx}]")
+                        data.append(val & 0xFF)
+                    except ValueError:
+                         self.inputs[i][j].border_color = ft.Colors.RED
+                         self.inputs[i][j].update()
+                         raise ValueError(f"Invalid input at ({i+1},{j+1})")
+                         
             self.on_send(r, c, data)
         except Exception as ex:
             if self.page:
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Input Error: {str(ex)}"), bgcolor="red"))
+                self.page.open(ft.SnackBar(content=ft.Text(f"Input Error: {str(ex)}"), bgcolor="red"))
 
-class MatrixOutput(ft.Column):
-    def __init__(self):
-        super().__init__()
-        self.spacing = 20
-        self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        
-        self.rows_val = ft.Text("-", size=20, weight=ft.FontWeight.BOLD)
-        self.cols_val = ft.Text("-", size=20, weight=ft.FontWeight.BOLD)
-        
-        self.grid_container = ft.Column(spacing=8, alignment=ft.MainAxisAlignment.CENTER)
-        
-        self.controls = [
-            ft.Container(
-                content=ft.Row([
-                    ft.Text("Received Dimensions:", color=ft.Colors.OUTLINE),
-                    self.rows_val,
-                    ft.Text("×", size=18, color=ft.Colors.OUTLINE),
-                    self.cols_val
-                ], alignment=ft.MainAxisAlignment.CENTER),
-                padding=ft.padding.only(bottom=10)
-            ),
-            ft.Container(
-                content=self.grid_container,
-                padding=20,
-                bgcolor="#0DFFFFFF",
-                border_radius=10,
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                alignment=ft.alignment.center
-            )
-        ]
-        self.update_matrix(0, 0, [])
-
-    def update_matrix(self, r, c, data):
-        self.rows_val.value = str(r)
-        self.cols_val.value = str(c)
-        
-        if r == 0 or c == 0:
-            self.grid_container.controls = [ft.Text("Waiting for result...", color=ft.Colors.OUTLINE)]
-        else:
-            grid_controls = []
-            idx = 0
-            for i in range(r):
-                row_controls = []
-                for j in range(c):
-                    val = data[idx] if idx < len(data) else 0
-                    idx += 1
-                    
-                    # Color coding
-                    bg_color = "surfaceVariant"
-                    if val > 0: bg_color = ft.Colors.INDIGO_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.INDIGO_100
-                    if val < 0: bg_color = ft.Colors.RED_900 if self.page and self.page.theme_mode == ft.ThemeMode.DARK else ft.Colors.RED_100
-                    
-                    tf = ft.Container(
-                        content=ft.Text(str(val), text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
-                        width=50, height=40,
-                        alignment=ft.alignment.center,
-                        border_radius=4,
-                        bgcolor=bg_color,
-                        border=ft.border.all(1, ft.Colors.OUTLINE)
-                    )
-                    row_controls.append(tf)
-                grid_controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER))
-            self.grid_container.controls = grid_controls
-            
-        if self.page:
-            self.update()
 
 class StorageControl(ft.Column):
     def __init__(self, on_refresh, on_fetch):
@@ -337,7 +304,7 @@ class StorageControl(ft.Column):
             r = int(self.rows_field.value)
             c = int(self.cols_field.value)
             if r < 1 or c < 1 or r > 5 or c > 5:
-                if self.page: self.page.show_snack_bar(ft.SnackBar(content=ft.Text("Dimensions must be 1-5"), bgcolor="red"))
+                if self.page: self.page.open(ft.SnackBar(content=ft.Text("Dimensions must be 1-5"), bgcolor="red"))
                 return
             self.on_fetch(r, c)
         except:
@@ -378,7 +345,7 @@ class CalcControl(ft.Column):
         try:
             val = int(self.id_field.value)
             if val < 0 or val > 255:
-                if self.page: self.page.show_snack_bar(ft.SnackBar(content=ft.Text("ID must be 0-255"), bgcolor="red"))
+                if self.page: self.page.open(ft.SnackBar(content=ft.Text("ID must be 0-255"), bgcolor="red"))
                 return
             self.on_send_id(val)
         except:
@@ -578,7 +545,7 @@ def main(page: ft.Page):
             
             # Extract data
             data = rx_numbers[idx+3 : idx+expected_len]
-            matrix_output.update_matrix(r, c, data)
+            log(f"Received Matrix {r}x{c}: {data}", "rx")
             
             # Remove processed packet
             del rx_numbers[:idx+expected_len]
@@ -640,7 +607,7 @@ def main(page: ft.Page):
 
     def send_matrix_payload(r, c, data_bytes):
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
         # FPGA expects pure binary data: [r, c, d1, d2, ...]
         # Do NOT send \r or \n at the end, otherwise it will be interpreted as the start of a new matrix (rows=13)
@@ -651,17 +618,17 @@ def main(page: ft.Page):
 
     def send_storage_refresh():
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
-        # Send '0' then '0' (ASCII)
-        if serial_manager.send_bytes(b'00'):
-            log("Sent Storage Refresh (00)", "tx")
+        # Send '00 00'
+        if serial_manager.send_bytes(b'00 00'):
+            log("Sent Storage Refresh (00 00)", "tx")
         else:
             log("Cannot send: Disconnected", "error")
 
     def send_storage_fetch(r, c):
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
         # Send 'r' then 'c' (ASCII)
         cmd = str(r).encode('ascii') + str(c).encode('ascii')
@@ -672,17 +639,18 @@ def main(page: ft.Page):
 
     def send_calc_id(matrix_id):
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
-        # Send raw byte for ID
-        if serial_manager.send_bytes(bytes([matrix_id])):
-            log(f"Sent Matrix ID: {matrix_id}", "tx")
+        # Send ID as Hex String (e.g. 10 -> "0A")
+        hex_payload = f"{matrix_id:02X}"
+        if serial_manager.send_bytes(hex_payload.encode('utf-8')):
+            log(f"Sent Matrix ID: {matrix_id} (Hex: {hex_payload})", "tx")
         else:
             log("Cannot send: Disconnected", "error")
 
     def send_raw_ascii(text):
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
         if not text: return
         if serial_manager.send_bytes(text.encode('utf-8')):
@@ -692,7 +660,7 @@ def main(page: ft.Page):
 
     def send_raw_hex(text):
         if not serial_manager.is_connected:
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
+            page.open(ft.SnackBar(content=ft.Text("Please connect first!"), bgcolor="red"))
             return
         if not text: return
         try:
@@ -703,6 +671,56 @@ def main(page: ft.Page):
                 log(f"Sent Hex: {bytes_data.hex().upper()}", "tx")
         except Exception as e:
             log(f"Hex Error: {e}", "error")
+
+    # --- Global Config ---
+    app_config = {
+        "min_val": 0,
+        "max_val": 9
+    }
+
+    # --- Settings Dialog ---
+    min_val_input = ft.TextField(label="Min Value", value="0", width=100, text_align=ft.TextAlign.RIGHT)
+    max_val_input = ft.TextField(label="Max Value", value="9", width=100, text_align=ft.TextAlign.RIGHT)
+
+    def save_settings(e):
+        try:
+            mn = int(min_val_input.value)
+            mx = int(max_val_input.value)
+            if mn > mx:
+                min_val_input.error_text = "Min > Max"
+                min_val_input.update()
+                return
+            
+            app_config["min_val"] = mn
+            app_config["max_val"] = mx
+            min_val_input.error_text = None
+            page.close(settings_dialog)
+            log(f"Settings updated: Range [{mn}, {mx}]", "info")
+        except ValueError:
+            min_val_input.error_text = "Invalid Number"
+            min_val_input.update()
+
+    settings_dialog = ft.AlertDialog(
+        title=ft.Text("Global Settings"),
+        content=ft.Container(
+            height=150,
+            content=ft.Column([
+                ft.Text("Matrix Element Range Limit", weight=ft.FontWeight.BOLD),
+                ft.Text("Configure the valid range for matrix elements. This is a client-side check only.", size=12, color="outline"),
+                ft.Row([min_val_input, ft.Text("-"), max_val_input], alignment=ft.MainAxisAlignment.CENTER)
+            ], spacing=20)
+        ),
+        actions=[
+            ft.TextButton("Cancel", on_click=lambda e: page.close(settings_dialog)),
+            ft.TextButton("Save", on_click=save_settings)
+        ],
+    )
+
+    def open_settings_dialog(e):
+        min_val_input.value = str(app_config["min_val"])
+        max_val_input.value = str(app_config["max_val"])
+        min_val_input.error_text = None
+        page.open(settings_dialog)
 
     # --- Theme Toggle ---
     def toggle_theme(e):
@@ -756,15 +774,16 @@ def main(page: ft.Page):
         on_click=toggle_theme,
         icon_color=ft.Colors.PRIMARY
     )
+    
+    settings_btn = ft.IconButton(
+        icon=ft.Icons.SETTINGS,
+        tooltip="Global Settings",
+        on_click=open_settings_dialog,
+        icon_color=ft.Colors.PRIMARY
+    )
 
     # --- Main Content (Right) ---
-    
-    # Define result_section here so it's available for the Dashboard tab
-    matrix_output = MatrixOutput() # Create instance first to use in callback
-    result_section = StyledCard(
-        title="Matrix Output", icon=ft.Icons.APPS,
-        content=matrix_output
-    )
+
 
     # Tabs for Modes
     mode_tabs = ft.Tabs(
@@ -773,7 +792,7 @@ def main(page: ft.Page):
         tabs=[
             ft.Tab(
                 text="Input", icon=ft.Icons.GRID_ON, 
-                content=ft.Container(content=MatrixInput(send_matrix_payload), padding=10)
+                content=ft.Container(content=MatrixInput(send_matrix_payload, app_config), padding=10)
             ),
             ft.Tab(
                 text="View", icon=ft.Icons.STORAGE, 
@@ -803,6 +822,7 @@ def main(page: ft.Page):
                         ft.Text("Controller v1.0", color=ft.Colors.OUTLINE, size=10)
                     ], spacing=0),
                     ft.Container(expand=True),
+                    settings_btn,
                     theme_btn # 切换按钮
                 ]),
                 padding=ft.padding.only(bottom=20)
@@ -872,16 +892,6 @@ def main(page: ft.Page):
         animation_duration=300,
         tabs=[
             ft.Tab(
-                text="Dashboard",
-                icon=ft.Icons.DASHBOARD,
-                content=ft.Container(
-                    content=ft.Column([
-                        result_section,
-                    ], scroll=ft.ScrollMode.AUTO, spacing=10),
-                    padding=20
-                )
-            ),
-            ft.Tab(
                 text="System Logs",
                 icon=ft.Icons.TERMINAL,
                 content=ft.Container(
@@ -904,10 +914,21 @@ def main(page: ft.Page):
         ], expand=True)
     )
 
-    # Debug: Print an alignment test pattern
-    log("Alignment Test:\n1234567890\n..........", "info")
-
     refresh_ports(None)
+
+    # Auto-connect logic
+    def try_auto_connect():
+        ports = serial_manager.get_ports()
+        for port in ports:
+            log(f"Auto-connecting to {port}...", "info")
+            if serial_manager.connect(port, DEFAULT_BAUDRATE):
+                return
+        
+        # Failed
+        if not ports:
+             log("No ports found for auto-connect.", "info")
+
+    try_auto_connect()
 
 if __name__ == "__main__":
     ft.app(target=main)

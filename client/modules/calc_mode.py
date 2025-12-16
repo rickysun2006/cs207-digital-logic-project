@@ -2,6 +2,9 @@ import flet as ft
 import re
 import time
 from .ui_components import StyledCard, MatrixDisplay
+import re
+import time
+from .ui_components import StyledCard, MatrixDisplay
 
 class CalcMode(ft.Container):
     def __init__(self, serial_manager):
@@ -77,7 +80,79 @@ class CalcMode(ft.Container):
             ),
             ft.Container(height=10),
             StyledCard(
+        # Constants
+        self.OP_ADD = "Addition"
+        self.OP_MUL = "Matrix Mul"
+        self.OP_SCALAR = "Scalar Mul"
+        self.OP_TRANS = "Transpose"
+        self.OP_CONV = "Convolution"
+        
+        # State
+        self.current_op = None
+        self.state = "SELECT_OP" # SELECT_OP, WAIT_STATS_A, SELECT_DIM_A, WAIT_MATRICES_A, SELECT_MATRIX_A, ...
+        
+        self.matrix_a_dims = (0, 0) # (rows, cols)
+        self.matrix_b_dims = (0, 0)
+        
+        self.stats_buffer = []
+        self.parsing_table = False
+        self.table_border_count = 0
+        self.total_matrices_expected = 0
+        self.total_matrices_found = 0
+        
+        self.matrices_to_receive = 0
+        self.current_req_m = 0
+        self.current_req_n = 0
+        self.current_matrix_lines_left = 0
+        self.current_matrix_buffer = []
+        self.current_id = ""
+        
+        self.result_buffer = []
+        self.expected_result_rows = 0
+
+        # UI Components
+        self.op_dropdown = ft.Dropdown(
+            label="Operation Type",
+            options=[
+                ft.dropdown.Option(self.OP_ADD),
+                ft.dropdown.Option(self.OP_MUL),
+                ft.dropdown.Option(self.OP_SCALAR),
+                ft.dropdown.Option(self.OP_TRANS),
+                ft.dropdown.Option(self.OP_CONV),
+            ],
+            width=200,
+            on_change=self.on_op_changed
+        )
+        
+        self.reset_btn = ft.ElevatedButton(
+            "Reset", icon=ft.Icons.RESTART_ALT, 
+            on_click=self.reset,
+            style=ft.ButtonStyle(bgcolor="red", color="white")
+        )
+        
+        self.status_text = ft.Text("Select an operation to start", size=16, color="outline")
+        
+        # Dynamic Content Area
+        self.content_area = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
+        
+        # Main Layout
+        self.content = ft.Column([
+            StyledCard(
+                content=ft.Row([
+                    self.op_dropdown,
+                    ft.Container(expand=True),
+                    self.reset_btn
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                title="Calculation Setup", icon=ft.Icons.SETTINGS
+            ),
+            ft.Container(height=10),
+            StyledCard(
                 content=ft.Column([
+                    self.status_text,
+                    ft.Divider(),
+                    self.content_area
+                ], expand=True),
+                title="Workflow", icon=ft.Icons.WORK_HISTORY,
                     self.status_text,
                     ft.Divider(),
                     self.content_area
@@ -85,6 +160,29 @@ class CalcMode(ft.Container):
                 title="Workflow", icon=ft.Icons.WORK_HISTORY,
                 expand=True
             )
+        ], expand=True)
+
+    def reset(self, e=None):
+        self.state = "SELECT_OP"
+        self.current_op = None
+        self.op_dropdown.value = None
+        self.op_dropdown.disabled = False
+        self.status_text.value = "Select an operation to start"
+        self.content_area.controls.clear()
+        self.update()
+
+    def on_op_changed(self, e):
+        if not self.op_dropdown.value: return
+        
+        self.current_op = self.op_dropdown.value
+        self.op_dropdown.disabled = True
+        self.state = "WAIT_STATS_A"
+        self.status_text.value = f"Mode: {self.current_op}. Waiting for Matrix A statistics from FPGA..."
+        self.content_area.controls.clear()
+        self.content_area.controls.append(
+            ft.ProgressBar(width=None, color="primary", bgcolor="surfaceVariant")
+        )
+        self.update()
         ], expand=True)
 
     def reset(self, e=None):

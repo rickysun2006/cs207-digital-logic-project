@@ -64,9 +64,15 @@ def main(page: ft.Page):
         process_line(line)
 
     def on_serial_status(connected, msg):
+        color = "green" if connected else "red"
         status_text.value = "ONLINE" if connected else "OFFLINE"
-        status_text.color = "green" if connected else "red"
+        status_text.color = color
         status_detail.value = msg
+        
+        # Update dots
+        appbar_status_dot.bgcolor = color
+        dialog_status_dot.bgcolor = color
+        
         connect_btn.visible = not connected
         disconnect_btn.visible = connected
         port_dropdown.disabled = connected
@@ -182,10 +188,13 @@ def main(page: ft.Page):
     status_text = ft.Text("OFFLINE", color="red", weight=ft.FontWeight.BOLD, size=12)
     status_detail = ft.Text("Ready", size=10, color=ft.Colors.OUTLINE, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
     
+    # Status Dots
+    appbar_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="red")
+    dialog_status_dot = ft.Container(width=10, height=10, border_radius=5, bgcolor="red")
+    
     def refresh_ports(e):
         ports = serial_manager.get_ports()
         options = [ft.dropdown.Option(p) for p in ports]
-        options.append(ft.dropdown.Option("socket://localhost:7777", text="Simulator (TCP)"))
         port_dropdown.options = options
         if options: port_dropdown.value = options[0].key
         page.update()
@@ -212,7 +221,7 @@ def main(page: ft.Page):
             width=400,
             content=ft.Column([
                 ft.Row([
-                    ft.Container(width=10, height=10, border_radius=5, bgcolor=status_text.color, content=status_text), 
+                    dialog_status_dot, 
                     status_text, 
                     ft.Container(expand=True), 
                     status_detail
@@ -268,7 +277,7 @@ def main(page: ft.Page):
             # Status Indicator
             ft.Container(
                 content=ft.Row([
-                    ft.Container(width=8, height=8, border_radius=4, bgcolor=status_text.color, content=status_text),
+                    appbar_status_dot,
                     status_text
                 ]),
                 padding=ft.padding.symmetric(horizontal=10),
@@ -299,6 +308,26 @@ def main(page: ft.Page):
     )
     
     refresh_ports(None)
+
+    # Auto-connect logic
+    def try_auto_connect():
+        ports = serial_manager.get_ports()
+        for port in ports:
+            log(f"Auto-connecting to {port}...", "info")
+            if serial_manager.connect(port, 115200):
+                return
+        
+        # Failed
+        dlg = ft.AlertDialog(
+            title=ft.Text("自动连接失败"),
+            content=ft.Text("无法自动连接到任何串口，请尝试手动连接。"),
+            actions=[
+                ft.TextButton("确定", on_click=lambda e: page.close(dlg))
+            ],
+        )
+        page.open(dlg)
+
+    try_auto_connect()
 
 if __name__ == "__main__":
     ft.app(target=main)

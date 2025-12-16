@@ -62,8 +62,8 @@ class SerialManager:
                     try:
                         text_data = raw_data.decode('utf-8', errors='replace')
                         self._process_buffer(text_data)
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"Error processing serial data: {e}")
             except Exception as e:
                 print(f"Serial Read Error: {e}")
                 break

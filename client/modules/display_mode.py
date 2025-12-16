@@ -23,7 +23,10 @@ class DisplayMode(ft.Container):
 
         # UI
         self.stats_list = ft.ListView(expand=True, spacing=5)
-        self.matrix_view = ft.ListView(expand=True, spacing=10, auto_scroll=True)
+        
+        # Use a Flow layout (Row with wrap) inside a scrollable Column for matrices
+        self.matrix_wrap = ft.Row(wrap=True, spacing=15, run_spacing=15, alignment=ft.MainAxisAlignment.START)
+        self.matrix_scroll = ft.Column([self.matrix_wrap], scroll=ft.ScrollMode.AUTO, expand=True)
         
         left_col = StyledCard(
             title="Statistics", icon=ft.Icons.ANALYTICS,
@@ -35,9 +38,9 @@ class DisplayMode(ft.Container):
         )
         
         right_col = StyledCard(
-            title="Matrices", icon=ft.Icons.DATA_ARRAY,
+            title="Matrices", icon=ft.Icons.GRID_VIEW,
             expand=True,
-            content=ft.Container(content=self.matrix_view, expand=True, bgcolor="background", border_radius=8, padding=10)
+            content=ft.Container(content=self.matrix_scroll, expand=True, bgcolor="background", border_radius=8, padding=15)
         )
 
         self.content = ft.Row([left_col, right_col], expand=True, spacing=20)
@@ -56,9 +59,9 @@ class DisplayMode(ft.Container):
             # Send m, n as binary bytes
             self.serial.send_bytes(bytes([m, n]))
             
-            self.matrix_view.controls.clear()
-            self.matrix_view.controls.append(ft.Text(f"Fetching {count} matrices of size {m}x{n} (Sent: {m:02X} {n:02X})...", italic=True))
-            self.matrix_view.update()
+            self.matrix_wrap.controls.clear()
+            if self.page:
+                self.update()
             
             self.waiting_matrices_count = count
             self.current_req_m = m
@@ -107,8 +110,8 @@ class DisplayMode(ft.Container):
                     self.add_matrix_card(self.current_id, self.current_matrix_buffer)
                     self.waiting_matrices_count -= 1
                     if self.waiting_matrices_count == 0:
-                        self.matrix_view.controls.append(ft.Text("Done.", color="green"))
-                        self.matrix_view.update()
+                        if self.page:
+                            self.update()
 
     def add_stat_item(self, m, n, cnt):
         btn = ft.ElevatedButton(
@@ -122,12 +125,28 @@ class DisplayMode(ft.Container):
         text_block = "\n".join(lines)
         card = ft.Container(
             content=ft.Column([
-                ft.Text(f"ID: {mid}", weight=ft.FontWeight.BOLD),
-                ft.Text(text_block, font_family="Consolas", size=14)
-            ]),
-            bgcolor=ft.Colors.SURFACE,
+                ft.Container(
+                    content=ft.Text(f"ID: {mid}", weight=ft.FontWeight.BOLD, size=12, color="primary"),
+                    alignment=ft.alignment.center
+                ),
+                ft.Divider(height=1, color="outlineVariant"),
+                ft.Container(
+                    content=ft.Text(text_block, font_family="Consolas", size=16, weight=ft.FontWeight.BOLD),
+                    alignment=ft.alignment.center,
+                    padding=5
+                )
+            ], spacing=5),
+            bgcolor="surfaceVariant",
             padding=10,
-            border_radius=5
+            border_radius=8,
+            border=ft.border.all(1, "outlineVariant"),
+            shadow=ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=3,
+                color="#4D000000",
+                offset=ft.Offset(0, 2),
+            )
         )
-        self.matrix_view.controls.append(card)
-        self.matrix_view.update()
+        self.matrix_wrap.controls.append(card)
+        if self.page:
+            self.update()

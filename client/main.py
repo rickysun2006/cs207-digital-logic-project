@@ -84,8 +84,14 @@ def main(page: ft.Page):
 
     serial_manager = SerialManager(on_serial_data, on_serial_status, on_serial_tx)
 
+    # --- Global Config ---
+    app_config = {
+        "min_val": 0,
+        "max_val": 9
+    }
+
     # --- Modes ---
-    input_mode = InputMode(serial_manager)
+    input_mode = InputMode(serial_manager, app_config)
     gen_mode = GenMode(serial_manager)
     display_mode = DisplayMode(serial_manager)
     calc_mode = CalcMode(serial_manager)
@@ -263,7 +269,51 @@ def main(page: ft.Page):
     def open_console(e):
         page.open(console_bottom_sheet)
 
-    # 3. AppBar (Top Navigation)
+    # 3. Settings Dialog
+    min_val_input = ft.TextField(label="Min Value", value="0", width=100, text_align=ft.TextAlign.RIGHT)
+    max_val_input = ft.TextField(label="Max Value", value="9", width=100, text_align=ft.TextAlign.RIGHT)
+
+    def save_settings(e):
+        try:
+            mn = int(min_val_input.value)
+            mx = int(max_val_input.value)
+            if mn > mx:
+                min_val_input.error_text = "Min > Max"
+                min_val_input.update()
+                return
+            
+            app_config["min_val"] = mn
+            app_config["max_val"] = mx
+            min_val_input.error_text = None
+            page.close(settings_dialog)
+            log(f"Settings updated: Range [{mn}, {mx}]", "info")
+        except ValueError:
+            min_val_input.error_text = "Invalid Number"
+            min_val_input.update()
+
+    settings_dialog = ft.AlertDialog(
+        title=ft.Text("Global Settings"),
+        content=ft.Container(
+            height=150,
+            content=ft.Column([
+                ft.Text("Matrix Element Range Limit", weight=ft.FontWeight.BOLD),
+                ft.Text("Configure the valid range for matrix elements. This is a client-side check only.", size=12, color="outline"),
+                ft.Row([min_val_input, ft.Text("-"), max_val_input], alignment=ft.MainAxisAlignment.CENTER)
+            ], spacing=20)
+        ),
+        actions=[
+            ft.TextButton("Cancel", on_click=lambda e: page.close(settings_dialog)),
+            ft.ElevatedButton("Save", on_click=save_settings)
+        ],
+    )
+
+    def open_settings_dialog(e):
+        min_val_input.value = str(app_config["min_val"])
+        max_val_input.value = str(app_config["max_val"])
+        min_val_input.error_text = None
+        page.open(settings_dialog)
+
+    # 4. AppBar (Top Navigation)
     page.appbar = ft.AppBar(
         leading=ft.Icon(ft.Icons.GRID_VIEW_ROUNDED, color=ft.Colors.PRIMARY, size=30),
         leading_width=50,
@@ -287,6 +337,7 @@ def main(page: ft.Page):
             ),
             # Action Buttons
             ft.IconButton(ft.Icons.SETTINGS_ETHERNET, tooltip="Connection", on_click=open_connection_dialog),
+            ft.IconButton(ft.Icons.SETTINGS, tooltip="Settings", on_click=open_settings_dialog),
             ft.IconButton(ft.Icons.TERMINAL, tooltip="Console", on_click=open_console),
             ft.IconButton(ft.Icons.LIGHT_MODE, on_click=toggle_theme, icon_color=ft.Colors.PRIMARY),
             ft.Container(width=10)

@@ -2,9 +2,10 @@ import flet as ft
 from .ui_components import StyledCard, MatrixInputGrid, MatrixDisplay
 
 class InputMode(ft.Container):
-    def __init__(self, serial_manager):
+    def __init__(self, serial_manager, config):
         super().__init__()
         self.serial = serial_manager
+        self.config = config
         self.expand = True
         self.padding = 20
         
@@ -23,19 +24,19 @@ class InputMode(ft.Container):
         self.input_grid.set_dimensions(3, 3)
         
         self.result_display = MatrixDisplay("Generated Matrix")
-        self.result_id_display = ft.Text("ID: --", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY)
+        self.result_id_display = ft.Text("ID: --", size=20, weight=ft.FontWeight.BOLD, color="primary")
 
         # Layout
         left_panel = StyledCard(
             title="Input Matrix", icon=ft.Icons.GRID_ON,
             content=ft.Column([
                 ft.Row([self.rows_input, ft.Text("x"), self.cols_input], alignment=ft.MainAxisAlignment.CENTER),
-                ft.Container(content=self.input_grid, padding=10, border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT), border_radius=8),
+                ft.Container(content=self.input_grid, padding=10, border=ft.border.all(1, "outlineVariant"), border_radius=8),
                 ft.ElevatedButton(
                     "Send to FPGA", 
                     icon=ft.Icons.SEND, 
                     on_click=self.send_data,
-                    style=ft.ButtonStyle(bgcolor=ft.Colors.PRIMARY, color=ft.Colors.ON_PRIMARY)
+                    style=ft.ButtonStyle(bgcolor="primary", color="onPrimary")
                 )
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20)
         )
@@ -64,13 +65,78 @@ class InputMode(ft.Container):
         except:
             pass
 
+    def show_validation_error(self, msg):
+        if not self.page: return
+        dlg = ft.AlertDialog(
+            title=ft.Text("输入错误"),
+            content=ft.Text(msg),
+            actions=[
+                ft.TextButton("确定", on_click=lambda e: self.page.close(dlg))
+            ],
+        )
+        self.page.open(dlg)
+
     def send_data(self, e):
         if not self.serial.is_connected:
             return
         
-        values = self.input_grid.get_values()
+        # Reset styles
+        self.rows_input.border_color = None
+        self.cols_input.border_color = None
+        for row in self.input_grid.inputs:
+            for tf in row:
+                tf.border_color = "outline"
+        self.update()
+        
+        # Validation
+        try:
+            try:
+                r = int(self.rows_input.value)
+                c = int(self.cols_input.value)
+            except ValueError:
+                self.rows_input.border_color = "red"
+                self.cols_input.border_color = "red"
+                self.update()
+                self.show_validation_error("请输入有效的维度数字")
+                return
+
+            if not (1 <= r <= 5 and 1 <= c <= 5):
+                self.rows_input.border_color = "red"
+                self.cols_input.border_color = "red"
+                self.update()
+                self.show_validation_error("矩阵维度必须在 1-5 之间")
+                return
+            
+            # Validate grid values
+            has_error = False
+            values = []
+            min_v = self.config["min_val"]
+            max_v = self.config["max_val"]
+            
+            for row in self.input_grid.inputs:
+                for tf in row:
+                    try:
+                        val = int(tf.value)
+                        if not (min_v <= val <= max_v):
+                            tf.border_color = "red"
+                            has_error = True
+                        values.append(val)
+                    except ValueError:
+                        tf.border_color = "red"
+                        has_error = True
+                        values.append(0)
+            
+            if has_error:
+                self.update()
+                self.show_validation_error(f"矩阵元素必须在 {min_v}-{max_v} 之间")
+                return
+
+        except ValueError:
+             self.show_validation_error("请输入有效的数字")
+             return
+        
         # Format: m n v1 v2 ... (Binary)
-        payload = [self.current_rows, self.current_cols] + values
+        payload = [r, c] + values
         # Convert to bytes, handling potential negative numbers or overflows by masking
         payload_bytes = bytes([x & 0xFF for x in payload])
         self.serial.send_bytes(payload_bytes)
@@ -94,7 +160,8 @@ class InputMode(ft.Container):
             # First line is ID
             self.collected_id = line.strip()
             self.result_id_display.value = f"ID: {self.collected_id}"
-            self.result_id_display.update()
+            if self.result_id_display.page:
+                self.result_id_display.update()
         else:
             # Subsequent lines are matrix rows
             self.collected_matrix_lines.append(line)

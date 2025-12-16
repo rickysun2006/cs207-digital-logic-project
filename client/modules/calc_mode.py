@@ -8,7 +8,7 @@ class CalcMode(ft.Container):
         super().__init__()
         self.serial = serial_manager
         self.expand = True
-        self.padding = 20
+        self.padding = 5
         
         # Constants
         self.OP_ADD = "Addition"
@@ -35,6 +35,10 @@ class CalcMode(ft.Container):
         self.current_matrix_lines_left = 0
         self.current_matrix_buffer = []
         self.current_id = ""
+        
+        self.echo_a_buffer = []
+        self.echo_b_buffer = []
+        self.echo_lines_left = 0
         
         self.result_buffer = []
         self.expected_result_rows = 0
@@ -65,26 +69,20 @@ class CalcMode(ft.Container):
         self.content_area = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
         
         # Main Layout
-        self.content = ft.Column([
-            StyledCard(
-                content=ft.Row([
-                    self.op_dropdown,
-                    ft.Container(expand=True),
-                    self.reset_btn
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                title="Calculation Setup", icon=ft.Icons.SETTINGS
-            ),
-            ft.Container(height=10),
-            StyledCard(
-                content=ft.Column([
-                    self.status_text,
-                    ft.Divider(),
-                    self.content_area
-                ], expand=True),
-                title="Workflow", icon=ft.Icons.WORK_HISTORY,
-                expand=True
-            )
-        ], expand=True)
+        self.content = StyledCard(
+            content=ft.Column([
+                self.status_text,
+                ft.Divider(),
+                self.content_area
+            ], expand=True),
+            title="Calculation Workspace", 
+            icon=ft.Icons.CALCULATE,
+            expand=True,
+            extra_header_controls=[
+                self.op_dropdown,
+                self.reset_btn
+            ]
+        )
 
     def reset(self, e=None):
         self.state = "SELECT_OP"
@@ -132,6 +130,12 @@ class CalcMode(ft.Container):
             self.parse_matrices(line, is_a=False)
             
         # --- Phase C: Result ---
+        elif self.state == "WAIT_ECHO_A":
+            self.parse_echo(line, is_a=True)
+            
+        elif self.state == "WAIT_ECHO_B":
+            self.parse_echo(line, is_a=False)
+            
         elif self.state == "WAIT_RESULT":
             self.parse_result(line)
 
@@ -340,62 +344,115 @@ class CalcMode(ft.Container):
                 self.content_area.controls.append(ft.ProgressBar(width=None, color="primary", bgcolor="surfaceVariant"))
                 self.update()
             else:
-                # Scalar, Transpose, OR CONV -> Wait Result/Confirm
-                self.prepare_confirmation()
+                # Scalar, Transpose, OR CONV -> Wait Echo A
+                self.prepare_wait_echo()
         else:
-            # B selected -> Wait Result
-            self.prepare_confirmation()
+            # B selected -> Wait Echo A (assuming FPGA echoes A then B)
+            self.prepare_wait_echo()
 
-    def prepare_confirmation(self):
-        self.state = "WAIT_CONFIRM"
-        self.status_text.value = "Operands Selected. Waiting for user confirmation..."
-        self.content_area.controls.clear()
+    def prepare_wait_echo(self):
+        self.state = "WAIT_ECHO_A"
+        self.echo_a_buffer = []
+        self.echo_b_buffer = []
+        self.echo_lines_left = self.matrix_a_dims[0]
+        self.echo_waiting_id = True
         
-        def on_confirm_click(e):
-            self.prepare_wait_result()
-
+        self.status_text.value = "Receiving echo from FPGA..."
+        self.content_area.controls.clear()
         self.content_area.controls.append(
             ft.Column([
-                ft.Icon(ft.Icons.INFO_OUTLINE, size=40, color="orange"),
-                ft.Text("FPGA is echoing selected matrices...", size=16, weight=ft.FontWeight.BOLD),
-                ft.Text("1. Verify the matrices on the FPGA/Console.", size=14),
-                ft.Text("2. Wait for the echo to finish.", size=14),
-                ft.Text("3. Click 'Ready for Result' below.", size=14),
-                ft.Text("4. THEN press 'Confirm' on the FPGA.", size=14, color="yellow"),
-                ft.Container(height=20),
-                ft.ElevatedButton(
-                    "Ready for Result", 
-                    icon=ft.Icons.CHECK, 
-                    bgcolor="green", color="white",
-                    on_click=on_confirm_click
-                )
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
+                ft.ProgressBar(width=None, color="orange", bgcolor="surfaceVariant"),
+                ft.Text("Reading echoed matrices...", italic=True)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
         self.update()
 
-    def prepare_wait_result(self):
+    def parse_echo(self, line, is_a):
+        line = line.strip()
+        if not line: return
+        # Heuristic: Check if line has numbers (ignore headers like "Matrix A:")
+        if not re.search(r'\d', line): return 
+
+        if self.echo_waiting_id:
+            self.echo_waiting_id = False
+            return
+
+        if is_a:
+            self.echo_a_buffer.append(line)
+            self.echo_lines_left -= 1
+            if self.echo_lines_left <= 0:
+                # Done with A
+                if self.current_op in [self.OP_ADD, self.OP_MUL]:
+                    # Move to B
+                    self.state = "WAIT_ECHO_B"
+                    self.echo_lines_left = self.matrix_b_dims[0]
+                    self.echo_waiting_id = True
+                else:
+                    # Unary or Conv (A only) -> Done
+                    self.show_pre_result_ui()
+        else:
+            # Parsing B
+            self.echo_b_buffer.append(line)
+            self.echo_lines_left -= 1
+            if self.echo_lines_left <= 0:
+                self.show_pre_result_ui()
+
+    def show_pre_result_ui(self):
         self.state = "WAIT_RESULT"
-        self.status_text.value = "Waiting for calculation result... (Press Confirm on FPGA)"
+        self.status_text.value = "Echo Received. Waiting for Calculation..."
         self.content_area.controls.clear()
+        
+        # Show Echoed Matrices
+        echo_view = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=10)
+        
+        # Card A
+        echo_view.controls.append(self.create_mini_matrix_card("Operand A", self.echo_a_buffer))
+        
+        # Op Symbol
+        op_sym = "+" if self.current_op == self.OP_ADD else ("*" if self.current_op == self.OP_MUL else "->")
+        echo_view.controls.append(ft.Text(op_sym, size=20, weight=ft.FontWeight.BOLD))
+        
+        # Card B (if exists)
+        if self.echo_b_buffer:
+            echo_view.controls.append(self.create_mini_matrix_card("Operand B", self.echo_b_buffer))
+            
+        echo_view.controls.append(ft.Text("=", size=20, weight=ft.FontWeight.BOLD))
+        echo_view.controls.append(ft.Text("?", size=30, weight=ft.FontWeight.BOLD, color="outline"))
+
+        self.content_area.controls.append(echo_view)
+        self.content_area.controls.append(ft.Divider())
         self.content_area.controls.append(
             ft.Column([
                 ft.ProgressBar(width=None, color="green", bgcolor="surfaceVariant"),
-                ft.Text("Listening for result...", italic=True, text_align=ft.TextAlign.CENTER)
+                ft.Text("Please press 'Confirm' on the FPGA board to calculate.", size=16, weight=ft.FontWeight.BOLD, color="green")
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
         self.update()
         
-        # Calculate expected result rows
+        # Prepare for result
         if self.current_op == self.OP_CONV:
             self.expected_result_rows = 8
         elif self.current_op == self.OP_TRANS:
-            self.expected_result_rows = self.matrix_a_dims[1] # Cols become rows
+            self.expected_result_rows = self.matrix_a_dims[1]
         elif self.current_op == self.OP_MUL:
-            self.expected_result_rows = self.matrix_a_dims[0] # A.rows
+            self.expected_result_rows = self.matrix_a_dims[0]
         else:
             self.expected_result_rows = self.matrix_a_dims[0]
             
         self.result_buffer = []
+
+    def create_mini_matrix_card(self, title, lines):
+        return ft.Container(
+            content=ft.Column([
+                ft.Text(title, size=10, color="outline"),
+                ft.Text("\n".join(lines), font_family="Consolas", size=10)
+            ]),
+            bgcolor="surface", padding=10, border_radius=5, border=ft.border.all(1, "outlineVariant")
+        )
+
+    def prepare_wait_result(self):
+        # Deprecated by show_pre_result_ui, but kept for safety if called elsewhere
+        pass
 
     def parse_result(self, line):
         # Collect lines until we have enough rows
@@ -413,16 +470,29 @@ class CalcMode(ft.Container):
         self.status_text.value = "Calculation Complete"
         self.content_area.controls.clear()
         
-        text_block = "\n".join(self.result_buffer)
+        # Final Result View
+        result_view = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
         
-        # Special styling for Conv result (Large)
+        # Operand A
+        result_view.controls.append(self.create_mini_matrix_card("Operand A", self.echo_a_buffer))
+        
+        # Op Symbol
+        op_sym = "+" if self.current_op == self.OP_ADD else ("*" if self.current_op == self.OP_MUL else "->")
+        result_view.controls.append(ft.Text(op_sym, size=20, weight=ft.FontWeight.BOLD))
+        
+        # Operand B (if exists)
+        if self.echo_b_buffer:
+            result_view.controls.append(self.create_mini_matrix_card("Operand B", self.echo_b_buffer))
+            
+        result_view.controls.append(ft.Text("=", size=20, weight=ft.FontWeight.BOLD))
+        
+        # Result Matrix (Large)
         font_size = 12 if self.current_op == self.OP_CONV else 16
-        
         result_card = ft.Container(
             content=ft.Column([
-                ft.Text("Result Matrix", size=20, weight=ft.FontWeight.BOLD, color="green"),
+                ft.Text("Result", size=12, color="green", weight=ft.FontWeight.BOLD),
                 ft.Divider(),
-                ft.Text(text_block, font_family="Consolas", size=font_size, weight=ft.FontWeight.BOLD, selectable=True)
+                ft.Text("\n".join(self.result_buffer), font_family="Consolas", size=font_size, weight=ft.FontWeight.BOLD, selectable=True)
             ]),
             bgcolor="surfaceVariant",
             padding=20,
@@ -430,8 +500,9 @@ class CalcMode(ft.Container):
             border=ft.border.all(2, "green"),
             shadow=ft.BoxShadow(spread_radius=2, blur_radius=10, color="#4D000000")
         )
+        result_view.controls.append(result_card)
         
-        self.content_area.controls.append(result_card)
+        self.content_area.controls.append(result_view)
         self.content_area.controls.append(ft.Container(height=20))
         self.content_area.controls.append(
             ft.ElevatedButton("New Calculation", on_click=self.reset, icon=ft.Icons.ADD)

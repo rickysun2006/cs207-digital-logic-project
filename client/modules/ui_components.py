@@ -2,7 +2,7 @@ import flet as ft
 
 class StyledCard(ft.Container):
     """统一风格的卡片容器"""
-    def __init__(self, content, title=None, icon=None, expand=False):
+    def __init__(self, content, title=None, icon=None, expand=False, extra_header_controls=None):
         super().__init__()
         self.bgcolor = "surface"
         self.border_radius = 12
@@ -22,8 +22,14 @@ class StyledCard(ft.Container):
             header_controls.append(ft.Text(title, size=16, weight=ft.FontWeight.BOLD))
             
         inner_col = ft.Column(spacing=15)
-        if header_controls:
-            inner_col.controls.append(ft.Row(header_controls, alignment=ft.MainAxisAlignment.START))
+        if header_controls or extra_header_controls:
+            row_controls = header_controls
+            if extra_header_controls:
+                if header_controls:
+                    row_controls.append(ft.Container(expand=True)) # Spacer
+                row_controls.extend(extra_header_controls)
+                
+            inner_col.controls.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER))
             inner_col.controls.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
         
         inner_col.controls.append(content)

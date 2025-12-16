@@ -2,9 +2,6 @@ import flet as ft
 import re
 import time
 from .ui_components import StyledCard, MatrixDisplay
-import re
-import time
-from .ui_components import StyledCard, MatrixDisplay
 
 class CalcMode(ft.Container):
     def __init__(self, serial_manager):
@@ -29,76 +26,8 @@ class CalcMode(ft.Container):
         
         self.stats_buffer = []
         self.parsing_table = False
-        self.table_border_count = 0
         self.total_matrices_expected = 0
-        self.total_matrices_found = 0
-        
-        self.matrices_to_receive = 0
-        self.current_req_m = 0
-        self.current_req_n = 0
-        self.current_matrix_lines_left = 0
-        self.current_matrix_buffer = []
-        self.current_id = ""
-        
-        self.result_buffer = []
-        self.expected_result_rows = 0
-
-        # UI Components
-        self.op_dropdown = ft.Dropdown(
-            label="Operation Type",
-            options=[
-                ft.dropdown.Option(self.OP_ADD),
-                ft.dropdown.Option(self.OP_MUL),
-                ft.dropdown.Option(self.OP_SCALAR),
-                ft.dropdown.Option(self.OP_TRANS),
-                ft.dropdown.Option(self.OP_CONV),
-            ],
-            width=200,
-            on_change=self.on_op_changed
-        )
-        
-        self.reset_btn = ft.ElevatedButton(
-            "Reset", icon=ft.Icons.RESTART_ALT, 
-            on_click=self.reset,
-            style=ft.ButtonStyle(bgcolor="red", color="white")
-        )
-        
-        self.status_text = ft.Text("Select an operation to start", size=16, color="outline")
-        
-        # Dynamic Content Area
-        self.content_area = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
-        
-        # Main Layout
-        self.content = ft.Column([
-            StyledCard(
-                content=ft.Row([
-                    self.op_dropdown,
-                    ft.Container(expand=True),
-                    self.reset_btn
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                title="Calculation Setup", icon=ft.Icons.SETTINGS
-            ),
-            ft.Container(height=10),
-            StyledCard(
-        # Constants
-        self.OP_ADD = "Addition"
-        self.OP_MUL = "Matrix Mul"
-        self.OP_SCALAR = "Scalar Mul"
-        self.OP_TRANS = "Transpose"
-        self.OP_CONV = "Convolution"
-        
-        # State
-        self.current_op = None
-        self.state = "SELECT_OP" # SELECT_OP, WAIT_STATS_A, SELECT_DIM_A, WAIT_MATRICES_A, SELECT_MATRIX_A, ...
-        
-        self.matrix_a_dims = (0, 0) # (rows, cols)
-        self.matrix_b_dims = (0, 0)
-        
-        self.stats_buffer = []
-        self.parsing_table = False
-        self.table_border_count = 0
-        self.total_matrices_expected = 0
-        self.total_matrices_found = 0
+        self.current_matrices_found = 0
         
         self.matrices_to_receive = 0
         self.current_req_m = 0
@@ -153,11 +82,6 @@ class CalcMode(ft.Container):
                     self.content_area
                 ], expand=True),
                 title="Workflow", icon=ft.Icons.WORK_HISTORY,
-                    self.status_text,
-                    ft.Divider(),
-                    self.content_area
-                ], expand=True),
-                title="Workflow", icon=ft.Icons.WORK_HISTORY,
                 expand=True
             )
         ], expand=True)
@@ -176,29 +100,11 @@ class CalcMode(ft.Container):
         
         self.current_op = self.op_dropdown.value
         self.op_dropdown.disabled = True
-        self.state = "WAIT_STATS_A"
-        self.status_text.value = f"Mode: {self.current_op}. Waiting for Matrix A statistics from FPGA..."
-        self.content_area.controls.clear()
-        self.content_area.controls.append(
-            ft.ProgressBar(width=None, color="primary", bgcolor="surfaceVariant")
-        )
-        self.update()
-        ], expand=True)
-
-    def reset(self, e=None):
-        self.state = "SELECT_OP"
-        self.current_op = None
-        self.op_dropdown.value = None
-        self.op_dropdown.disabled = False
-        self.status_text.value = "Select an operation to start"
-        self.content_area.controls.clear()
-        self.update()
-
-    def on_op_changed(self, e):
-        if not self.op_dropdown.value: return
         
-        self.current_op = self.op_dropdown.value
-        self.op_dropdown.disabled = True
+        # Reset stats counters
+        self.total_matrices_expected = 0
+        self.current_matrices_found = 0
+        
         self.state = "WAIT_STATS_A"
         self.status_text.value = f"Mode: {self.current_op}. Waiting for Matrix A statistics from FPGA..."
         self.content_area.controls.clear()
@@ -235,26 +141,27 @@ class CalcMode(ft.Container):
         line = line.strip()
         if not line: return
 
-        # Check for Total count
-        # Example: "Total Matrices: 5" or "Total: 5"
-        total_match = re.search(r'Total.*:\s*(\d+)', line, re.IGNORECASE)
-        if total_match:
-            self.total_matrices_expected = int(total_match.group(1))
-            self.total_matrices_found = 0
-            return
+        # Try to parse Total count if not in table
+        if not self.parsing_table:
+            # User specified: Plain number indicating total count
+            if line.isdigit():
+                try:
+                    self.total_matrices_expected = int(line)
+                    self.current_matrices_found = 0
+                    return
+                except:
+                    pass
 
         # Detect table start or separator
         if "+----" in line:
             if not self.parsing_table:
                 self.stats_buffer = []
-                self.table_border_count = 1
                 # Clear loading indicator
                 self.content_area.controls.clear()
                 
                 # Special handling for Conv A: Don't show UI, just show loading
                 if self.current_op == self.OP_CONV and is_a:
                     self.content_area.controls.append(ft.Text("Auto-selecting 3x3 Kernels...", italic=True))
-                    self.stats_grid = None # No grid for Conv A
                     self.update()
                 else:
                     label = "Matrix A" if is_a else "Matrix B"
@@ -262,26 +169,16 @@ class CalcMode(ft.Container):
                     self.stats_grid = ft.Row(wrap=True, spacing=10)
                     self.content_area.controls.append(self.stats_grid)
                     self.update()
+                self.parsing_table = True
             else:
-                self.table_border_count += 1
-                
-                # Check if we are done based on total count
-                # If we hit a border AND we have found all matrices, we are done.
-                is_end_of_table = False
-                if self.total_matrices_expected > 0:
-                    if self.total_matrices_found >= self.total_matrices_expected:
-                        is_end_of_table = True
-                
-                if is_end_of_table:
+                # It's a separator line. Check if we have found all matrices.
+                if self.total_matrices_expected > 0 and self.current_matrices_found >= self.total_matrices_expected:
+                    # This is likely the bottom border
                     self.parsing_table = False
-                    self.table_border_count = 0
-                    self.total_matrices_expected = 0 # Reset
                     
                     # Special Auto-Select for Convolution Kernel (3x3)
                     if is_a and self.current_op == self.OP_CONV:
                         self.request_matrices(3, 3, 99, is_a=True)
-            
-            self.parsing_table = True
             return
 
         if self.parsing_table:
@@ -289,7 +186,8 @@ class CalcMode(ft.Container):
             match = re.search(r'\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|', line)
             if match:
                 m, n, cnt = map(int, match.groups())
-                self.total_matrices_found += cnt
+                
+                self.current_matrices_found += cnt
                 
                 # Filter logic for Matrix B
                 valid = True
@@ -311,13 +209,16 @@ class CalcMode(ft.Container):
             if re.search(r'\|\s*[a-zA-Z]', line):
                 return
 
-            # If we reach here, it's not a separator, not data, not header -> End of Table?
-            # Usually we rely on the border to close it.
-            pass
+            # Fallback: If we reach here, it's not a separator, not data, not header -> End of Table
+            # This handles cases where Total count wasn't found or logic failed
+            self.parsing_table = False
+            
+            # Special Auto-Select for Convolution Kernel (3x3)
+            if is_a and self.current_op == self.OP_CONV:
+                # Auto-request 3x3 matrices
+                self.request_matrices(3, 3, 99, is_a=True)
 
     def add_dim_button(self, m, n, cnt, is_a):
-        if not self.stats_grid: return # Safety check
-        
         btn = ft.ElevatedButton(
             f"{m}x{n} ({cnt})",
             on_click=lambda e: self.request_matrices(m, n, cnt, is_a)

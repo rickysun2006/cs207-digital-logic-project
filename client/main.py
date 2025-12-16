@@ -135,19 +135,23 @@ def main(page: ft.Page):
 
     def process_line(line):
         line = line.strip()
-        if line in ["ide", "inp", "gen", "dis", "cal"]:
-            log(f"Switching to mode: {line}", "info")
-            switch_mode(line)
-        else:
-            # Pass data to current active mode controller
-            if current_mode_key == "inp":
-                input_mode.handle_line(line)
-            elif current_mode_key == "gen":
-                gen_mode.handle_line(line)
-            elif current_mode_key == "dis":
-                display_mode.handle_line(line)
-            elif current_mode_key == "cal":
-                calc_mode.handle_line(line)
+        # Update: Check for "mode-xxx" format
+        if line.startswith("mode-"):
+            new_mode = line.split("-")[-1]
+            if new_mode in modes:
+                log(f"Switching to mode: {new_mode}", "info")
+                switch_mode(new_mode)
+                return
+
+        # Pass data to current active mode controller
+        if current_mode_key == "inp":
+            input_mode.handle_line(line)
+        elif current_mode_key == "gen":
+            gen_mode.handle_line(line)
+        elif current_mode_key == "dis":
+            display_mode.handle_line(line)
+        elif current_mode_key == "cal":
+            calc_mode.handle_line(line)
 
     # --- Sidebar ---
     # Header

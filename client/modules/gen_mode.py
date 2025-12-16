@@ -18,9 +18,9 @@ class GenMode(ft.Container):
         self.current_id = ""
 
         # UI
-        self.m_input = ft.TextField(label="Rows (m)", value="3", width=60)
-        self.n_input = ft.TextField(label="Cols (n)", value="3", width=60)
-        self.k_input = ft.TextField(label="Count (k)", value="1", width=60)
+        self.m_input = ft.TextField(label="Rows", value="3", width=60)
+        self.n_input = ft.TextField(label="Cols", value="3", width=60)
+        self.k_input = ft.TextField(label="Count", value="1", width=60)
         
         self.results_list = ft.ListView(expand=True, spacing=10, auto_scroll=True)
 

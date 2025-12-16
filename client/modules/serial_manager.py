@@ -4,11 +4,12 @@ import threading
 import time
 
 class SerialManager:
-    def __init__(self, on_data_received, on_status_changed):
+    def __init__(self, on_data_received, on_status_changed, on_data_sent=None):
         self.ser = None
         self.is_connected = False
         self.on_data_received = on_data_received
         self.on_status_changed = on_status_changed
+        self.on_data_sent = on_data_sent
         self.stop_event = threading.Event()
         self.read_thread = None
         self.buffer = ""
@@ -43,6 +44,13 @@ class SerialManager:
     def send_bytes(self, data: bytes):
         if self.ser and self.ser.is_open:
             self.ser.write(data)
+            if self.on_data_sent:
+                try:
+                    # Try to decode for logging, fallback to hex if binary
+                    text = data.decode('utf-8')
+                    self.on_data_sent(text)
+                except:
+                    self.on_data_sent(f"HEX: {data.hex()}")
             return True
         return False
 

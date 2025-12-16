@@ -9,7 +9,7 @@ from modules.ui_components import StyledCard
 
 def main(page: ft.Page):
     page.title = "FPGA Matrix Controller v2"
-    page.padding = 20
+    page.padding = 10
     page.window_width = 1200
     page.window_height = 800
 
@@ -73,7 +73,10 @@ def main(page: ft.Page):
         baud_input.disabled = connected
         page.update()
 
-    serial_manager = SerialManager(on_serial_data, on_serial_status)
+    def on_serial_tx(msg):
+        log(msg, "tx")
+
+    serial_manager = SerialManager(on_serial_data, on_serial_status, on_serial_tx)
 
     # --- Modes ---
     input_mode = InputMode(serial_manager)
@@ -119,14 +122,6 @@ def main(page: ft.Page):
             current_mode_key = new_mode
             mode_container.content = modes[new_mode]
             mode_label.value = f"Current Mode: {new_mode.upper()}"
-            
-            # Update sidebar buttons state
-            for key, btn in mode_buttons.items():
-                btn.style = ft.ButtonStyle(
-                    bgcolor=ft.Colors.PRIMARY if key == new_mode else "surfaceVariant",
-                    color=ft.Colors.ON_PRIMARY if key == new_mode else ft.Colors.ON_SURFACE
-                )
-
             page.update()
             
             # Reset state if needed
@@ -158,23 +153,8 @@ def main(page: ft.Page):
     # Header
     def toggle_theme(e):
         page.theme_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
-        theme_btn.icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
+        page.appbar.actions[3].icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
         page.update()
-
-    theme_btn = ft.IconButton(ft.Icons.LIGHT_MODE, on_click=toggle_theme, icon_color=ft.Colors.PRIMARY)
-
-    sidebar_header = ft.Container(
-        content=ft.Row([
-            ft.Icon(ft.Icons.GRID_VIEW_ROUNDED, color=ft.Colors.PRIMARY, size=30),
-            ft.Column([
-                ft.Text("FPGA Matrix", weight=ft.FontWeight.BOLD, size=18),
-                ft.Text("Controller v2.0", color=ft.Colors.OUTLINE, size=10)
-            ], spacing=0),
-            ft.Container(expand=True),
-            theme_btn
-        ]),
-        padding=ft.padding.only(bottom=20)
-    )
 
     # Connection Controls
     port_dropdown = ft.Dropdown(
@@ -220,102 +200,99 @@ def main(page: ft.Page):
         width=1000
     )
 
-    connection_card = StyledCard(
-        title="Connection", icon=ft.Icons.SETTINGS_ETHERNET,
-        content=ft.Column([
-            ft.Row([
-                ft.Container(width=10, height=10, border_radius=5, bgcolor=status_text.color, content=status_text), # Hacky binding
-                status_text, 
-                ft.Container(expand=True), 
-                status_detail
-            ]),
-            ft.Row([port_dropdown, ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ports, icon_color=ft.Colors.PRIMARY)]),
-            baud_input,
-            ft.Container(height=5),
-            connect_btn,
-            disconnect_btn
-        ])
-    )
-
-    # Manual Mode Switch (Debug)
-    mode_buttons = {}
-    mode_row_1 = []
-    mode_row_2 = []
+    # --- Layout Components ---
     
-    for i, m in enumerate(["inp", "gen", "dis", "cal"]):
-        btn = ft.ElevatedButton(
-            m.upper(), 
-            on_click=lambda e, mode=m: switch_mode(mode),
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=10),
-            expand=True
+    # 1. Connection Dialog (Hidden by default)
+    connection_dialog = ft.AlertDialog(
+        title=ft.Text("Connection Settings"),
+        content=ft.Container(
+            width=400,
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(width=10, height=10, border_radius=5, bgcolor=status_text.color, content=status_text), 
+                    status_text, 
+                    ft.Container(expand=True), 
+                    status_detail
+                ]),
+                ft.Divider(),
+                ft.Row([port_dropdown, ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ports, icon_color=ft.Colors.PRIMARY)]),
+                baud_input,
+                ft.Container(height=10),
+                connect_btn,
+                disconnect_btn
+            ], tight=True)
         )
-        mode_buttons[m] = btn
-        if i < 2: mode_row_1.append(btn)
-        else: mode_row_2.append(btn)
-
-    debug_card = StyledCard(
-        title="Manual Override", icon=ft.Icons.BUG_REPORT,
-        content=ft.Column([
-            ft.Row(mode_row_1),
-            ft.Row(mode_row_2)
-        ])
     )
 
-    sidebar = ft.Container(
-        width=300,
-        content=ft.Column([
-            sidebar_header,
-            connection_card,
-            ft.Container(height=10),
-            debug_card,
-            ft.Container(expand=True),
-            ft.Text("Designed with Flet", size=10, color=ft.Colors.OUTLINE, text_align=ft.TextAlign.CENTER)
-        ])
+    def open_connection_dialog(e):
+        page.open(connection_dialog)
+
+    # 2. Console Bottom Sheet (Hidden by default)
+    console_bottom_sheet = ft.BottomSheet(
+        ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("System Console", weight=ft.FontWeight.BOLD, size=16),
+                    ft.Container(expand=True),
+                    ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Clear Log", 
+                                  on_click=lambda e: log_view.controls.clear() or page.update()),
+                    ft.IconButton(ft.Icons.CLOSE, tooltip="Close", 
+                                  on_click=lambda e: page.close(console_bottom_sheet))
+                ]),
+                ft.Divider(),
+                ft.Container(content=log_view, expand=True, bgcolor="surface", border_radius=8, padding=10)
+            ]),
+            padding=20,
+            height=400,
+            bgcolor="surfaceVariant"
+        )
     )
 
-    # --- Layout ---
-    mode_label = ft.Text("Current Mode: IDLE", size=20, weight=ft.FontWeight.BOLD)
-    
-    # Terminal
-    terminal_header = ft.Container(
-        padding=10, bgcolor="surfaceVariant", 
-        border_radius=ft.border_radius.only(top_left=8, top_right=8),
-        content=ft.Row([
-            ft.Icon(ft.Icons.TERMINAL, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Text("System Console", size=12, color=ft.Colors.ON_SURFACE_VARIANT, weight=ft.FontWeight.BOLD),
-            ft.Container(expand=True),
-            ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color=ft.Colors.ON_SURFACE_VARIANT, 
-                          tooltip="Clear Log", on_click=lambda e: log_view.controls.clear() or page.update())
-        ])
-    )
-    
-    terminal_body = ft.Container(
-        content=log_view,
+    def open_console(e):
+        page.open(console_bottom_sheet)
+
+    # 3. AppBar (Top Navigation)
+    page.appbar = ft.AppBar(
+        leading=ft.Icon(ft.Icons.GRID_VIEW_ROUNDED, color=ft.Colors.PRIMARY, size=30),
+        leading_width=50,
+        title=ft.Column([
+            ft.Text("FPGA Matrix Controller", weight=ft.FontWeight.BOLD, size=18),
+            ft.Text("v2.0", color=ft.Colors.OUTLINE, size=12)
+        ], spacing=0),
+        center_title=False,
         bgcolor="surface",
-        expand=True,
-        border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
-        padding=10,
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        actions=[
+            # Status Indicator
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(width=8, height=8, border_radius=4, bgcolor=status_text.color, content=status_text),
+                    status_text
+                ]),
+                padding=ft.padding.symmetric(horizontal=10),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border_radius=20,
+                margin=ft.margin.only(right=10)
+            ),
+            # Action Buttons
+            ft.IconButton(ft.Icons.SETTINGS_ETHERNET, tooltip="Connection", on_click=open_connection_dialog),
+            ft.IconButton(ft.Icons.TERMINAL, tooltip="Console", on_click=open_console),
+            ft.IconButton(ft.Icons.LIGHT_MODE, on_click=toggle_theme, icon_color=ft.Colors.PRIMARY),
+            ft.Container(width=10)
+        ]
     )
 
+    # 4. Main Layout
+    mode_label = ft.Text("Current Mode: IDLE", size=16, weight=ft.FontWeight.BOLD)
+    
     page.add(
-        ft.Row([
-            sidebar,
-            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(
-                content=ft.Column([
-                    ft.Container(content=mode_label, padding=ft.padding.only(bottom=10)),
-                    mode_container,
-                    ft.Container(height=10),
-                    ft.Container(
-                        content=ft.Column([terminal_header, terminal_body], spacing=0),
-                        height=200
-                    )
-                ], expand=True),
-                expand=True,
-                padding=10
-            )
-        ], expand=True)
+        ft.Container(
+            content=ft.Column([
+                ft.Container(content=mode_label, padding=ft.padding.only(bottom=5, left=5)),
+                mode_container,
+            ], expand=True),
+            expand=True,
+            padding=5
+        )
     )
     
     refresh_ports(None)

@@ -1,0 +1,223 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{verbatim}
+\usepackage{fvextra}
+
+\geometry{a4paper, margin=1in}
+
+\title{Project Document}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Developer Information}
+\subsection{Developers}
+\begin{itemize}
+    \item \textbf{Jiayao Qin}, SID: 12412619, Completed the overall structure design, FSM for main project and all sub systems, all detailed logics for sub systems, and improved the client for advanced features.
+    \item \textbf{Ruqi Sun}; SID: 12412620; Completed functional simulation, Arithmetic Logic Unit, Convolution Bonus, Front-end Client, and an LLM application aiming to support Digital Logic teaching.
+\end{itemize}
+
+\subsection{Contribution}
+Two developers contributed equally to this project, each accounts for 50\%.
+
+\section{Development Plan Schedule}
+\subsection{Plan}\noindent
+Week 13: Complete the overall structure design for the project, and complete Architecture Design Document accordingly. \\
+Week 14: Complete the sub systems for basic requirements. \\
+Week 15: Complete some bonus features, and fix numorous potential problems to improve stability.
+
+\subsection{Submit History}
+See attached file for github submission record.
+
+\section{Project Architecture Design Description}
+
+The project adopts a highly modular and hierarchical architecture designed for scalability, maintainability, and low coupling. The system is divided into three main layers: Physical Layer, System Integration Layer, and Functional Layer.
+
+\subsection{Hierarchical Design Strategy}
+\begin{itemize}
+    \item \textbf{Physical Top Layer (\texttt{fpga\_top.sv})}: This module serves as the interface to the physical hardware. It is strictly responsible for signal conditioning, including clock buffering, button debouncing, and mapping physical I/O pins to internal logic signals. No complex business logic resides here.
+    \item \textbf{Logical Top Layer (\texttt{system\_core.sv})}: This module acts as the system integrator. It instantiates all functional sub-systems and interconnects them. It contains no specific algorithmic logic, ensuring that the system integration remains clean and the coupling between modules is minimized.
+    \item \textbf{Functional Layer}: Specific logic is encapsulated within dedicated sub-modules (e.g., \texttt{matrix\_calc}, \texttt{matrix\_input}), which operate independently under the coordination of the system core.
+\end{itemize}
+
+\subsection{Modular Control \& Resource Arbitration}
+The control logic follows a decentralized pattern:
+\begin{itemize}
+    \item \textbf{Main FSM (\texttt{main\_fsm.sv})}: Manages the high-level system states (e.g., switching between Input, Calculation, and Display modes). It delegates specific control authority to the active sub-system.
+    \item \textbf{Sub-System Autonomy}: Each functional module (Input, Gen, Calc, Display, Settings) possesses its own internal Finite State Machine (FSM) to handle specific tasks. Once activated, a sub-system takes control until its task is complete.
+    \item \textbf{Resource Controllers}: To manage shared hardware resources efficiently, we introduced dedicated controllers:
+    \begin{itemize}
+        \item \textbf{\texttt{output\_controller}}: Arbitrates access to the UART transmission line, allowing multiple modules to send data without conflict.
+        \item \textbf{\texttt{input\_controller}}: Manages write access to the central storage.
+        \item \textbf{\texttt{seg\_controller} \& \texttt{led\_controller}}: Centralize the logic for visual feedback, preventing display conflicts.
+    \end{itemize}
+\end{itemize}
+This design significantly reduced code complexity and made adding new features (like the \texttt{settings} module) seamless, as it only required hooking into the existing controller interfaces.
+
+\subsection{Structured Organization \& Standardization}
+\begin{itemize}
+    \item \textbf{Directory Structure}: Source files are organized by functionality (e.g., \texttt{src/calc/}, \texttt{src/display\_sys/}) rather than a flat directory, improving navigability.
+    \item \textbf{Common Library}: Reusable components such as UART drivers, LFSRs, and debounce logic are placed in a \texttt{src/common/} directory to promote code reuse.
+    \item \textbf{Package Management (\texttt{project\_pkg.sv})}: We utilize SystemVerilog packages to centralize global parameters (e.g., matrix dimensions, opcodes) and custom data structures (e.g., \texttt{matrix\_t}, \texttt{matrix\_element\_t}). This ensures type safety and consistency across the entire project.
+\end{itemize}
+
+\subsection{Timing Optimization \& Resource Management}
+To address severe timing violations (WNS -12ns at 100MHz) and resource constraints, we implemented several architectural optimizations:
+\begin{itemize}
+    \item \textbf{Logic Sequentialization}: In the Convolution module, we replaced a massive single-cycle combinational logic chain with a multi-cycle sequential state machine. This reduced the critical path by spreading the 3x3 kernel accumulation over 9 clock cycles.
+    \item \textbf{Pipelining}: We introduced a 2-stage Fetch-Execute pipeline in the Matrix ALU. This isolates the memory read latency from the arithmetic computation, effectively cutting the critical path in half.
+    \item \textbf{Algorithm Optimization}: In the LFSR module, we replaced the expensive modulo operator (\texttt{\%}) with a multiplication-shift algorithm (\texttt{(rand * range) >> 8}). This leverages the FPGA's high-speed DSP slices instead of slow division logic.
+    \item \textbf{Fanout Control}: For global control signals like \texttt{latched\_wr\_id}, we applied synthesis attributes (\texttt{(* max\_fanout = 20 *)}) to force register replication, reducing routing delays caused by high fanout.
+\end{itemize}
+
+\subsection{Data-Centric Storage Architecture}
+\begin{itemize}
+    \item \textbf{Centralized Storage (\texttt{matrix\_storage\_sys})}: Matrix data is decoupled from processing logic. The storage system acts as a server, providing read/write ports to other modules.
+    \item \textbf{Standardized Interfaces}: Communication between modules relies on standardized handshake signals (\texttt{start}, \texttt{done}, \texttt{ready}) and structured data types, ensuring robust data flow and easier debugging.
+\end{itemize}
+
+\section{Bonus Implementation Description}
+
+\subsection{Output Alignment}
+To ensure a clean and readable display on the PC client (or serial terminal), we implemented a centralized output formatting module, \texttt{matrix\_uart\_sender.sv}.
+\begin{itemize}
+    \item \textbf{Centralized Formatting}: Instead of having each module (ALU, Generator, Display) implement its own UART logic and BCD conversion, they all instantiate or share this sender module.
+    \item \textbf{Smart Alignment}: The module automatically handles:
+    \begin{itemize}
+        \item \textbf{Sign Handling}: Detects negative numbers and inserts the minus sign.
+        \item \textbf{BCD Conversion}: Converts binary values to decimal digits for ASCII transmission.
+        \item \textbf{Padding}: Adds dynamic whitespace padding to ensure columns align perfectly, regardless of the number of digits (e.g., aligning "5" with "-123").
+        \item \textbf{Line Endings}: Automatically handles row breaks (\texttt{\textbackslash r\textbackslash n}) based on the \texttt{is\_last\_col} flag.
+    \end{itemize}
+    \item \textbf{Mode Indication}: It also supports sending pre-defined mode strings (e.g., "CALC", "INPUT") to notify the client of the current system state.
+\end{itemize}
+
+\subsection{Parameter Configuration}
+We introduced a dedicated \texttt{settings\_sys} module to allow runtime configuration of system parameters, enhancing flexibility without recompilation.
+\begin{itemize}
+    \item \textbf{Design Philosophy}: From the early design phase, all functional modules (e.g., \texttt{matrix\_gen}, \texttt{matrix\_storage}) were designed with configuration input ports (e.g., \texttt{val\_max}, \texttt{active\_limit}) rather than hardcoded constants. Initially, these were tied to default values defined in \texttt{project\_pkg.sv}.
+    \item \textbf{Seamless Integration}: The \texttt{settings\_sys} module was added as a "plugin" that drives these existing ports. It reads user inputs via switches and buttons, updates the configuration registers, and broadcasts the new values to the rest of the system.
+    \item \textbf{Configurable Parameters}:
+    \begin{itemize}
+        \item \textbf{Generation Range}: Max/Min values for the random matrix generator.
+        \item \textbf{Error Display Time}: Duration for showing error messages on the 7-segment display.
+        \item \textbf{Storage Limit}: The maximum number of matrices the user is allowed to create (limiting resource usage).
+    \end{itemize}
+\end{itemize}
+
+\section{Open Source and AI Usage}
+
+\subsection{Open Source References}
+\begin{itemize}
+    \item \textbf{UART Module}: The UART communication modules (\texttt{uart\_rx.sv} and \texttt{uart\_tx.sv}) located in \texttt{src/common/UART/} are adapted from the open-source examples provided by \textbf{Alientek}.
+    \begin{itemize}
+        \item Source: \href{http://www.yuanzige.com}{www.yuanzige.com} / \href{http://www.openedv.com}{http://www.openedv.com}
+        \item These modules provide reliable serial communication capabilities, which we integrated into our system for data exchange with the PC client.
+    \end{itemize}
+\end{itemize}
+
+\subsection{AI Usage}
+\textbf{Tools Used:} Gemini, GitHub Copilot
+
+\textbf{Usage Scenarios:}
+\begin{itemize}
+    \item \textbf{Development:} Provided with the overall structure deign, AI was extensively used to generate code skeletons and boilerplate, significantly accelerating the coding process. It allowed us to focus on high-level logic while AI handled the repetitive implementation details.
+    \item \textbf{Debugging:} AI assisted in quickly locating syntax errors and logical bugs. It provided explanations for error messages and suggested potential fixes.
+    \item \textbf{Code Comprehension \& Commenting:} AI helped in quickly understanding complex code segments and automatically generating comments, improving code readability.
+    \item \textbf{Testbench Generation:} We used AI to generate testbenches for various modules. It was particularly effective for creating standard test patterns and edge cases.
+    \item \textbf{Documentation:} AI assisted in summarizing project details and generating README files, ensuring documentation was kept up-to-date.
+    \item \textbf{Workflow Assistance:} AI guided us in setting up and using unfamiliar workflows, such as configuring \texttt{iverilog} for lightweight simulation in VS Code and mastering SystemVerilog syntax.
+\end{itemize}
+
+\subsection{AI-Assisted Development: Pros and Cons}
+
+\textbf{Advantages:}
+\begin{enumerate}
+    \item \textbf{Efficiency in Boilerplate Generation:} AI excels at writing repetitive code structures (like FSM templates, module instantiations, and standard port mappings). This allowed us to complete the project foundation much faster than manual coding.
+    \item \textbf{Rapid Learning and Problem Solving:} When encountering new tools (like \texttt{iverilog}) or language features (SystemVerilog packages), AI acted as an on-demand tutor, providing examples and explanations that were more direct and context-aware than searching through documentation.
+\end{enumerate}
+
+\textbf{Disadvantages \& Solutions:}
+\begin{enumerate}
+    \item \textbf{Unintended Code Modifications (The "Hallucination" Problem):}
+    \begin{itemize}
+        \item \textit{Issue:} If prompts are not precise enough, AI might make unintended changes or "hallucinate" logic updates. A specific instance occurred when we had a logic block to divide the CPU clock from 100MHz to 25MHz. In one of the refactoring steps, the AI commented out this critical logic without us noticing. We did not discover this until a very late stage in the project.
+        \item \textit{Solution:} We learned to be extremely specific in our prompts and to perform rigorous code reviews (diff checks) after every AI-generated change. We also realized the importance of having comprehensive regression tests that check core system parameters (like clock rates) to catch such accidental deletions early.
+    \end{itemize}
+    \item \textbf{Context Limitations and Integration Overhead:}
+    \begin{itemize}
+        \item \textit{Issue:} As the project scale increased, the AI struggled to maintain a holistic view of the entire project. It would sometimes generate code that was locally correct but inconsistent with global definitions (e.g., in \texttt{project\_pkg.sv}) or interface protocols defined in other modules, simply because it couldn't "see" all files simultaneously.
+        \item \textit{Solution:} We maintained three key documents (\texttt{DOCUMENT.md}, \texttt{README\_INSTRUCTION.md}, \texttt{README\_REQUIREMENTS.md}) that served as the project's "knowledge base." At the start of each new AI session, we fed these documents to the model. This allowed the AI to quickly "go through" and grasp the project's architecture, requirements, and current status, significantly reducing context errors.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Prompt Engineering Showcase}
+Case 1. Using documents for AI to go through the project and summarize the progress
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{../material/prompt_example_1.png}
+    \caption{Prompt Example 1}
+\end{figure}
+\textbf{Strategy:} Context-Aware Project Management (RAG). \\
+\textbf{Description:} We utilized the AI's ability to process large contexts by feeding it the \texttt{README\_REQUIREMENTS.md} and the project file structure. Instead of asking for specific code snippets, we prompted the AI to perform a holistic audit of the project status. \\
+\textbf{Outcome:} The AI successfully cross-referenced the requirements with the existing codebase, identifying that while the core logic (FSM, ALU, Convolution) was complete, the "Dynamic Parameter Configuration" feature was missing. This served as an effective automated quality assurance step.
+
+Case 2. AI-Assisted Debugging (Synthesis Error Analysis)
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{../material/prompt_example_2.png}
+    \caption{Prompt Example 2}
+\end{figure}
+\textbf{Strategy:} Error Log Analysis \& Concept Explanation. \\
+\textbf{Description:} When encountering cryptic Vivado synthesis errors (specifically \texttt{[Synth 8-659] type mismatch} in \texttt{matrix\_alu.sv}), we pasted the error log directly into the chat. The AI identified the root cause: a subtle mismatch between SystemVerilog \textbf{Packed Arrays} and \textbf{Unpacked Arrays}. \\
+\textbf{Outcome:} The AI clearly explained the memory layout differences between the two types (contiguous vs. scattered) and provided the correct syntax to fix the assignment. This turned a potentially hours-long debugging session into a 5-minute fix.
+
+\subsection{Reflection and Conclusion}
+
+This project served as a comprehensive experiment in integrating Large Language Models (LLMs) into the traditional FPGA development workflow. The experience demonstrated that AI is a powerful force multiplier, transforming the developer's role from a "coder" to a "system architect" and "verifier."
+
+\textbf{Key Takeaways:}
+
+\begin{enumerate}
+    \item \textbf{The Importance of Context:} The most significant lesson learned was that AI is only as good as the context it is given. Our strategy of maintaining a "Knowledge Base" (the three README files) and feeding it to the model at the start of sessions proved to be a game-changer. It effectively solved the "amnesia" problem common in long conversations and ensured that generated code adhered to global project constraints.
+
+    \item \textbf{Verification is Non-Negotiable:} While AI accelerated the \textit{writing} phase, it did not eliminate the need for the \textit{verification} phase. In fact, it made verification even more critical. The incident where a clock divider logic was silently removed highlights that AI can introduce subtle, "silent" bugs. A robust testbench and strict code review process are essential safety nets when working with AI-generated code.
+
+    \item \textbf{Prompt Engineering as a Skill:} We found that "Prompt Engineering" is not just a buzzword but a necessary technical skill. Writing clear, unambiguous instructions and breaking down complex tasks into "Chain-of-Thought" steps (as seen in the Convolution implementation) yielded significantly better results than vague, high-level requests.
+\end{enumerate}
+
+\textbf{Conclusion:}
+Ultimately, the project was completed successfully with all basic requirements and significant bonus features implemented. The use of AI allowed us to tackle more advanced features (like the Convolution accelerator and Python client) within the limited timeframe. We believe that the future of digital design lies in this hybrid approach: combining human creativity and architectural oversight with AI's speed and pattern-matching capabilities.
+
+\section{Suggestions for Project and Course Improvement}
+
+\subsection{Project Design in the AI Era: From Coders to Managers}
+In the age of Large Language Models, the role of a developer is fundamentally shifting. AI acts as a tireless, high-efficiency "coder," pushing humans towards the roles of \textbf{Project Managers} and \textbf{Product Managers}. Course projects should reflect this evolution:
+
+\begin{itemize}
+    \item \textbf{Scale and Complexity (The Project Manager View):} Projects should be designed with enough scale to challenge students' management capabilities. The current Matrix Calculator project is a prime example: its complex, interdependent subsystems (Input, Calculation, Display) force students to focus on system architecture, interface definitions, and progress tracking rather than just syntax. Future projects should maintain or exceed this level of complexity to train students in managing large-scale AI-assisted workflows.
+    \item \textbf{Innovation-Driven (The Product Manager View):} Since AI significantly lowers the barrier to implementation, the core value of a project shifts from "can you build it?" to "what can you build?". Projects should encourage students to act as Product Managers, focusing on innovative ideas and user experience. The assessment should reward students who leverage AI to realize creative features that would have been impossible to complete manually within the semester.
+\end{itemize}
+
+\subsection{Assessment Reform: Evaluating Creativity and Workflow}
+Traditional assessment methods based solely on code correctness are becoming less relevant. To evaluate a student's true capability in the AI era, we suggest the following adjustments:
+
+\begin{itemize}
+    \item \textbf{Focus on "Creative Capability":} We are no longer traditional "code monkeys." The most critical skill now is the ability to combine domain knowledge with cutting-edge AI workflows to create better products faster. Assessment should focus on the \textit{outcome} and the \textit{process of creation} rather than just the lines of code.
+    \item \textbf{Hackathon-Style Evaluation:} We recommend incorporating "Hackathon" or "Vibe-Coding" style assessments. These formats test a student's ability to use AI tools to perform creative work under time constraints. This mirrors the real-world demand for rapid prototyping and innovation, effectively measuring who can best leverage the "AI lever" to solve problems.
+\end{itemize}
+
+\section*{Appendix: Git History}
+\VerbatimInput[breaklines=true, fontsize=\small]{../material/git_history.txt}
+
+\end{document}

@@ -44,8 +44,5 @@ Thumbs.db
 # Project specific
 ref/
 
-# report material
-report/
-
 # python cache
 *.pyc

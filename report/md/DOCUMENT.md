@@ -9,12 +9,12 @@ Two developers contributed equally to this project, each accounts for 50%.
 
 ## Development Plan Schedule
 ### Plan
-Week 13: Complete the overall structure design for the project, and complete Architecture Design Document accordingly.
-Week 14: Complete the sub systems for basic requirements.
+Week 13: Complete the overall structure design for the project, and complete Architecture Design Document accordingly.  
+Week 14: Complete the sub systems for basic requirements.  
 Week 15: Complete some bonus features, and fix numorous potential problems to improve stability.
 
 ### Submit History
-See attached file for github submission record.
+See attached file for github submission record.  
 
 ## Project Architecture Design Description
 
@@ -40,30 +40,54 @@ This design significantly reduced code complexity and made adding new features (
 *   **Common Library**: Reusable components such as UART drivers, LFSRs, and debounce logic are placed in a `src/common/` directory to promote code reuse.
 *   **Package Management (`project_pkg.sv`)**: We utilize SystemVerilog packages to centralize global parameters (e.g., matrix dimensions, opcodes) and custom data structures (e.g., `matrix_t`, `matrix_element_t`). This ensures type safety and consistency across the entire project.
 
-### 4. Data-Centric Storage Architecture
+### 4. Timing Optimization & Resource Management
+To address severe timing violations (WNS -12ns at 100MHz) and resource constraints, we implemented several architectural optimizations:
+*   **Logic Sequentialization**: In the Convolution module, we replaced a massive single-cycle combinational logic chain with a multi-cycle sequential state machine. This reduced the critical path by spreading the 3x3 kernel accumulation over 9 clock cycles.
+*   **Pipelining**: We introduced a 2-stage Fetch-Execute pipeline in the Matrix ALU. This isolates the memory read latency from the arithmetic computation, effectively cutting the critical path in half.
+*   **Algorithm Optimization**: In the LFSR module, we replaced the expensive modulo operator (`%`) with a multiplication-shift algorithm (`(rand * range) >> 8`). This leverages the FPGA's high-speed DSP slices instead of slow division logic.
+*   **Fanout Control**: For global control signals like `latched_wr_id`, we applied synthesis attributes (`(* max_fanout = 20 *)`) to force register replication, reducing routing delays caused by high fanout.
+
+### 5. Data-Centric Storage Architecture
 *   **Centralized Storage (`matrix_storage_sys`)**: Matrix data is decoupled from processing logic. The storage system acts as a server, providing read/write ports to other modules.
 *   **Standardized Interfaces**: Communication between modules relies on standardized handshake signals (`start`, `done`, `ready`) and structured data types, ensuring robust data flow and easier debugging.
 
 ## Bonus Implementation Description
 
 ### Output Alignment
+To ensure a clean and readable display on the PC client (or serial terminal), we implemented a centralized output formatting module, `matrix_uart_sender.sv`.
+*   **Centralized Formatting**: Instead of having each module (ALU, Generator, Display) implement its own UART logic and BCD conversion, they all instantiate or share this sender module.
+*   **Smart Alignment**: The module automatically handles:
+    *   **Sign Handling**: Detects negative numbers and inserts the minus sign.
+    *   **BCD Conversion**: Converts binary values to decimal digits for ASCII transmission.
+    *   **Padding**: Adds dynamic whitespace padding to ensure columns align perfectly, regardless of the number of digits (e.g., aligning "5" with "-123").
+    *   **Line Endings**: Automatically handles row breaks (`\r\n`) based on the `is_last_col` flag.
+*   **Mode Indication**: It also supports sending pre-defined mode strings (e.g., "CALC", "INPUT") to notify the client of the current system state.
 
 ### Parameter Configuration
+We introduced a dedicated `settings_sys` module to allow runtime configuration of system parameters, enhancing flexibility without recompilation.
+*   **Design Philosophy**: From the early design phase, all functional modules (e.g., `matrix_gen`, `matrix_storage`) were designed with configuration input ports (e.g., `val_max`, `active_limit`) rather than hardcoded constants. Initially, these were tied to default values defined in `project_pkg.sv`.
+*   **Seamless Integration**: The `settings_sys` module was added as a "plugin" that drives these existing ports. It reads user inputs via switches and buttons, updates the configuration registers, and broadcasts the new values to the rest of the system.
+*   **Configurable Parameters**:
+    *   **Generation Range**: Max/Min values for the random matrix generator.
+    *   **Error Display Time**: Duration for showing error messages on the 7-segment display.
+    *   **Storage Limit**: The maximum number of matrices the user is allowed to create (limiting resource usage).
 
 ## Open Source and AI Usage
 
-### Open Source
+### Open Source References
+- **UART Module**: The UART communication modules (`uart_rx.sv` and `uart_tx.sv`) located in `src/common/UART/` are adapted from the open-source examples provided by **Alientek (正点原子)**.
+    - Source: [www.yuanzige.com](www.yuanzige.com) / [http://www.openedv.com](http://www.openedv.com)
+    - These modules provide reliable serial communication capabilities, which we integrated into our system for data exchange with the PC client.
 
 ### AI Usage
 **Tools Used:** Gemini, GitHub Copilot
 
 **Usage Scenarios:**
-*   **Development:** AI was extensively used to generate code skeletons and boilerplate, significantly accelerating the coding process. It allowed us to focus on high-level logic while AI handled the repetitive implementation details.
+*   **Development:** Provided with the overall structure deign, AI was extensively used to generate code skeletons and boilerplate, significantly accelerating the coding process. It allowed us to focus on high-level logic while AI handled the repetitive implementation details.
 *   **Debugging:** AI assisted in quickly locating syntax errors and logical bugs. It provided explanations for error messages and suggested potential fixes.
 *   **Code Comprehension & Commenting:** AI helped in quickly understanding complex code segments and automatically generating comments, improving code readability.
 *   **Testbench Generation:** We used AI to generate testbenches for various modules. It was particularly effective for creating standard test patterns and edge cases.
 *   **Documentation:** AI assisted in summarizing project details and generating README files, ensuring documentation was kept up-to-date.
-*   **Version Control:** AI helped generate clear and concise commit messages.
 *   **Workflow Assistance:** AI guided us in setting up and using unfamiliar workflows, such as configuring `iverilog` for lightweight simulation in VS Code and mastering SystemVerilog syntax.
 
 ### AI-Assisted Development: Pros and Cons
@@ -82,13 +106,13 @@ This design significantly reduced code complexity and made adding new features (
 
 ### Prompt Engineering Showcase
 Case 1. Using documents for AI to go through the project and summarize the progress
-![alt text](image.png)
+![alt text](../prompt_example_1.png)
 **Strategy:** Context-Aware Project Management (RAG).
 **Description:** We utilized the AI's ability to process large contexts by feeding it the `README_REQUIREMENTS.md` and the project file structure. Instead of asking for specific code snippets, we prompted the AI to perform a holistic audit of the project status.
 **Outcome:** The AI successfully cross-referenced the requirements with the existing codebase, identifying that while the core logic (FSM, ALU, Convolution) was complete, the "Dynamic Parameter Configuration" feature was missing. This served as an effective automated quality assurance step.
 
 Case 2. AI-Assisted Debugging (Synthesis Error Analysis)
-![alt text](image-1.png)
+![alt text](../prompt_example_2.png)
 **Strategy:** Error Log Analysis & Concept Explanation.
 **Description:** When encountering cryptic Vivado synthesis errors (specifically `[Synth 8-659] type mismatch` in `matrix_alu.sv`), we pasted the error log directly into the chat. The AI identified the root cause: a subtle mismatch between SystemVerilog **Packed Arrays** and **Unpacked Arrays**.
 **Outcome:** The AI clearly explained the memory layout differences between the two types (contiguous vs. scattered) and provided the correct syntax to fix the assignment. This turned a potentially hours-long debugging session into a 5-minute fix.

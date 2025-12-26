@@ -72,6 +72,9 @@ We introduced a dedicated `settings_sys` module to allow runtime configuration o
     *   **Error Display Time**: Duration for showing error messages on the 7-segment display.
     *   **Storage Limit**: The maximum number of matrices the user is allowed to create (limiting resource usage).
 
+### UI Design and Conv Operation
+Please see detailed info on this part in the vedio.
+
 ## Open Source and AI Usage
 
 ### Open Source References

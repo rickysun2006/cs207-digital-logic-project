@@ -9,6 +9,8 @@
 \usepackage{float}
 \usepackage{verbatim}
 \usepackage{fvextra}
+\usepackage{tikz}
+\usetikzlibrary{positioning, fit, shapes, arrows}
 
 \geometry{a4paper, margin=1in}
 
@@ -42,6 +44,62 @@ See attached file for github submission record.
 \section{Project Architecture Design Description}
 
 The project adopts a highly modular and hierarchical architecture designed for scalability, maintainability, and low coupling. The system is divided into three main layers: Physical Layer, System Integration Layer, and Functional Layer.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.5cm and 0.3cm,
+    box/.style={rectangle, draw=black, rounded corners, minimum width=1.8cm, minimum height=0.8cm, align=center, fill=white, font=\footnotesize},
+    container/.style={rectangle, draw=gray, dashed, inner sep=0.3cm, rounded corners},
+    arrow/.style={->, >=stealth, thick}
+]
+
+% Functional Modules
+\node[box, fill=blue!10] (calc) {Calc Sys};
+\node[box, fill=blue!10, left=of calc] (gen) {Gen Sys};
+\node[box, fill=blue!10, left=of gen] (input) {Input Sys};
+\node[box, fill=blue!10, right=of calc] (disp) {Display Sys};
+\node[box, fill=blue!10, right=of disp] (set) {Settings};
+
+% Main FSM above
+\node[box, fill=red!10, above=1cm of calc, minimum width=4cm] (fsm) {Main FSM};
+
+% Controllers below
+\node[box, fill=green!10, below=1cm of input] (in_ctrl) {Input Ctrl};
+\node[box, fill=green!10, below=1cm of calc] (out_ctrl) {Output Ctrl};
+\node[box, fill=green!10, below=1cm of set] (disp_ctrl) {Display Ctrl};
+
+% Storage below controllers
+\node[box, fill=yellow!10, below=1cm of out_ctrl, minimum width=8cm] (storage) {Matrix Storage System};
+
+% System Core Container
+\node[container, fit=(fsm) (input) (set) (storage) (disp_ctrl), label=above:\textbf{System Core}] (core) {};
+
+% FPGA Top Container
+\node[container, draw=black, thick, fit=(core), inner sep=0.5cm, label=above:\textbf{FPGA Top}] (top) {};
+
+% Connections
+\draw[arrow] (fsm) -| (input);
+\draw[arrow] (fsm) -| (gen);
+\draw[arrow] (fsm) -- (calc);
+\draw[arrow] (fsm) -| (disp);
+\draw[arrow] (fsm) -| (set);
+
+\draw[arrow] (input) -- (in_ctrl);
+\draw[arrow] (gen) -- (in_ctrl);
+\draw[arrow] (calc) -- (in_ctrl);
+
+\draw[arrow] (calc) -- (out_ctrl);
+\draw[arrow] (disp) -- (out_ctrl);
+\draw[arrow] (gen) -- (out_ctrl);
+
+\draw[arrow] (in_ctrl) -- (storage);
+\draw[arrow] (storage) -- (out_ctrl);
+
+\end{tikzpicture}
+\caption{System Architecture Diagram}
+\label{fig:sys_arch}
+\end{figure}
 
 \subsection{Hierarchical Design Strategy}
 \begin{itemize}
@@ -114,6 +172,9 @@ We introduced a dedicated \texttt{settings\_sys} module to allow runtime configu
         \item \textbf{Storage Limit}: The maximum number of matrices the user is allowed to create (limiting resource usage).
     \end{itemize}
 \end{itemize}
+
+\subsection{UI Design and Conv Operation}
+Please see more detailed info of these parts in the vedio.
 
 \section{Open Source and AI Usage}
 

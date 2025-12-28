@@ -366,7 +366,8 @@ def main(page: ft.Page):
     def try_auto_connect():
         # Use detailed port info to filter
         ports = serial.tools.list_ports.comports()
-        for port in ports:
+        # Scan in reverse order to prioritize higher COM ports (like COM4)
+        for port in reversed(ports):
             # Filter logic: Look for "USB" in description or HWID
             if "USB" not in port.description and "USB" not in port.hwid:
                 continue
@@ -379,6 +380,9 @@ def main(page: ft.Page):
             # Try to connect
             if serial_manager.connect(port.device, 115200):
                 log(f"Auto-connected to {port.device}", "info")
+                # Update dropdown to show connected port
+                port_dropdown.value = port.device
+                page.update()
                 return
             else:
                 # Connection failed (e.g. PermissionError if busy)
@@ -394,6 +398,8 @@ def main(page: ft.Page):
         )
         page.open(dlg)
 
+    # Wait for ports to stabilize
+    time.sleep(0.5)
     try_auto_connect()
 
 if __name__ == "__main__":

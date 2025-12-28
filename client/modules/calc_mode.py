@@ -99,6 +99,18 @@ class CalcMode(ft.Container):
         self.current_op = self.op_dropdown.value
         self.op_dropdown.disabled = True
         
+        # Send OpCode to FPGA
+        # A/a -> Add, B/b -> Mul, C/c -> Scalar, T/t -> Transpose, J/j -> Conv
+        op_char = None
+        if self.current_op == self.OP_ADD: op_char = b'A'
+        elif self.current_op == self.OP_MUL: op_char = b'B'
+        elif self.current_op == self.OP_SCALAR: op_char = b'C'
+        elif self.current_op == self.OP_TRANS: op_char = b'T'
+        elif self.current_op == self.OP_CONV: op_char = b'J'
+        
+        if op_char and self.serial.is_connected:
+            self.serial.send_bytes(op_char)
+        
         # Reset stats counters
         self.total_matrices_expected = 0
         self.current_matrices_found = 0

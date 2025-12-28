@@ -269,6 +269,37 @@ module matrix_calc_sys (
             else if (sw_mode_sel[4]) seg_content[7] <= CHAR_T;  // Transpose
             else if (sw_mode_sel[3]) seg_content[7] <= CHAR_J;  // Conv
 
+            // --- UART Selection Logic ---
+            if (rx_done) begin
+              case (rx_data)
+                8'h41, 8'h61: begin  // A/a -> ADD
+                  op_reg <= OP_ADD;
+                  target_op <= 0;
+                  state <= SEL_SHOW_SUM;
+                end
+                8'h42, 8'h62: begin  // B/b -> MAT_MUL
+                  op_reg <= OP_MAT_MUL;
+                  target_op <= 0;
+                  state <= SEL_SHOW_SUM;
+                end
+                8'h43, 8'h63: begin  // C/c -> SCALAR_MUL
+                  op_reg <= OP_SCALAR_MUL;
+                  target_op <= 0;
+                  state <= SEL_SHOW_SUM;
+                end
+                8'h54, 8'h74: begin  // T/t -> TRANSPOSE
+                  op_reg <= OP_TRANSPOSE;
+                  target_op <= 0;
+                  state <= SEL_SHOW_SUM;
+                end
+                8'h4A, 8'h6A: begin  // J/j -> CONV
+                  op_reg <= OP_CONV;
+                  target_op <= 0;
+                  state <= SEL_SHOW_SUM;
+                end
+              endcase
+            end
+
             if (btn_pos_confirm) begin
               // Decode Switchesbegin
               if (sw_mode_sel[7]) op_reg <= OP_ADD;

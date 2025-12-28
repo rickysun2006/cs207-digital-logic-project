@@ -2,6 +2,7 @@ import serial
 import serial.tools.list_ports
 import threading
 import time
+import traceback
 
 class SerialManager:
     def __init__(self, on_data_received, on_status_changed, on_data_sent=None):
@@ -64,6 +65,9 @@ class SerialManager:
                         self._process_buffer(text_data)
                     except Exception as e:
                         print(f"Error processing serial data: {e}")
+                        print(traceback.format_exc())
+                        if self.on_status_changed:
+                            self.on_status_changed(f"Data Error: {e}")
             except Exception as e:
                 print(f"Serial Read Error: {e}")
                 break

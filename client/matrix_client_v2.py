@@ -1,5 +1,6 @@
 import flet as ft
 import datetime
+import time
 import serial.tools.list_ports
 from modules.serial_manager import SerialManager
 from modules.input_mode import InputMode
@@ -367,13 +368,21 @@ def main(page: ft.Page):
         ports = serial.tools.list_ports.comports()
         for port in ports:
             # Filter logic: Look for "USB" in description or HWID
-            # This avoids connecting to built-in COM1/COM2 which are usually not the FPGA
             if "USB" not in port.description and "USB" not in port.hwid:
                 continue
 
-            log(f"Auto-connecting to {port.device} ({port.description})...", "info")
+            log(f"Checking {port.device} ({port.description})...", "info")
+            
+            # Small delay to ensure port is ready/stable
+            time.sleep(0.1)
+            
+            # Try to connect
             if serial_manager.connect(port.device, 115200):
+                log(f"Auto-connected to {port.device}", "info")
                 return
+            else:
+                # Connection failed (e.g. PermissionError if busy)
+                log(f"Skipping {port.device}: {status_detail.value}", "info")
         
         # Failed
         dlg = ft.AlertDialog(

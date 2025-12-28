@@ -478,10 +478,10 @@ module matrix_alu (
                   op_b_reg   <= 32'(signed'(matrix_B.cells[r][c]));
                   pipe_valid <= 1;
                 end else begin
-                  // Stage 2: Accumulate
-                  accum <= accum + (op_a_reg * op_b_reg);
+                  // Stage 2: Multiply (Split from Accumulate to fix timing)
+                  mul_res_reg <= op_a_reg * op_b_reg;
                   pipe_valid <= 0;
-                  cnt_k <= cnt_k + 1;
+                  state <= ALU_ACCUM;  // Use shared Accumulate state
                 end
               end
             end

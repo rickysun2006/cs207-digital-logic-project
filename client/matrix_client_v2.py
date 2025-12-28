@@ -1,5 +1,6 @@
 import flet as ft
 import datetime
+import serial.tools.list_ports
 from modules.serial_manager import SerialManager
 from modules.input_mode import InputMode
 from modules.gen_mode import GenMode
@@ -362,18 +363,24 @@ def main(page: ft.Page):
 
     # Auto-connect logic
     def try_auto_connect():
-        ports = serial_manager.get_ports()
+        # Use detailed port info to filter
+        ports = serial.tools.list_ports.comports()
         for port in ports:
-            log(f"Auto-connecting to {port}...", "info")
-            if serial_manager.connect(port, 115200):
+            # Filter logic: Look for "USB" in description or HWID
+            # This avoids connecting to built-in COM1/COM2 which are usually not the FPGA
+            if "USB" not in port.description and "USB" not in port.hwid:
+                continue
+
+            log(f"Auto-connecting to {port.device} ({port.description})...", "info")
+            if serial_manager.connect(port.device, 115200):
                 return
         
         # Failed
         dlg = ft.AlertDialog(
-            title=ft.Text("自动连接失败"),
-            content=ft.Text("无法自动连接到任何串口，请尝试手动连接。"),
+            title=ft.Text("Auto-Connect Failed"),
+            content=ft.Text("Could not auto-connect to any USB Serial device.\nPlease check connection or connect manually."),
             actions=[
-                ft.TextButton("确定", on_click=lambda e: page.close(dlg))
+                ft.TextButton("OK", on_click=lambda e: page.close(dlg))
             ],
         )
         page.open(dlg)

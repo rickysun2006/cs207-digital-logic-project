@@ -397,9 +397,22 @@ class CalcMode(ft.Container):
             if self.echo_lines_left <= 0:
                 self.show_pre_result_ui()
 
+    def send_confirm(self, e=None):
+        if self.serial.is_connected:
+            self.serial.send_bytes(bytes([0xFF]))
+
+    def send_cancel(self, e=None):
+        if self.serial.is_connected:
+            self.serial.send_bytes(bytes([0xFE]))
+        self.reset()
+
+    def on_new_calc(self, e=None):
+        self.send_confirm()
+        self.reset()
+
     def show_pre_result_ui(self):
         self.state = "WAIT_RESULT"
-        self.status_text.value = "Echo Received. Waiting for Calculation..."
+        self.status_text.value = "Echo Received. Confirm to Calculate..."
         self.content_area.controls.clear()
         
         # Show Echoed Matrices
@@ -421,12 +434,27 @@ class CalcMode(ft.Container):
 
         self.content_area.controls.append(echo_view)
         self.content_area.controls.append(ft.Divider())
-        self.content_area.controls.append(
-            ft.Column([
-                ft.ProgressBar(width=None, color="green", bgcolor="surfaceVariant"),
-                ft.Text("Please press 'Confirm' on the FPGA board to calculate.", size=16, weight=ft.FontWeight.BOLD, color="green")
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        
+        # Action Buttons
+        actions = ft.Row(
+            [
+                ft.ElevatedButton(
+                    "Cancel", 
+                    icon=ft.Icons.CANCEL, 
+                    style=ft.ButtonStyle(bgcolor="red", color="white"),
+                    on_click=self.send_cancel
+                ),
+                ft.ElevatedButton(
+                    "Confirm & Calculate", 
+                    icon=ft.Icons.CHECK_CIRCLE, 
+                    style=ft.ButtonStyle(bgcolor="green", color="white"),
+                    on_click=self.send_confirm
+                )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=20
         )
+        self.content_area.controls.append(actions)
         self.update()
         
         # Prepare for result
@@ -505,6 +533,6 @@ class CalcMode(ft.Container):
         self.content_area.controls.append(result_view)
         self.content_area.controls.append(ft.Container(height=20))
         self.content_area.controls.append(
-            ft.ElevatedButton("New Calculation", on_click=self.reset, icon=ft.Icons.ADD)
+            ft.ElevatedButton("New Calculation", on_click=self.on_new_calc, icon=ft.Icons.ADD)
         )
         self.update()

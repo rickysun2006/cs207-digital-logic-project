@@ -50,8 +50,20 @@ module system_core (
   // 1. Internal Signals Definition
   //==========================================================================
 
+  // --- UART Command Constants ---
+  localparam logic [7:0] UART_CMD_CONFIRM = 8'hFF;
+  localparam logic [7:0] UART_CMD_ESC = 8'hFE;
+
   // --- Wire Aliases ---
   wire btn_esc = btn_reset_logic;
+
+  // --- Combined Confirm Signal (Physical Button OR UART Command) ---
+  wire btn_confirm_combined;
+  assign btn_confirm_combined = btn_confirm | (rx_valid && (rx_byte == UART_CMD_CONFIRM));
+
+  // --- Combined ESC Signal (Physical Button OR UART Command) ---
+  wire btn_esc_combined;
+  assign btn_esc_combined = btn_esc | (rx_valid && (rx_byte == UART_CMD_ESC));
 
   // --- FSM Signals ---
   sys_state_t current_state;
@@ -215,13 +227,13 @@ module system_core (
   //==========================================================================
 
   // [FSM Reset Masking]: Prevent jumping to IDLE when pressing Esc in Input Mode
-  assign fsm_safe_reset_btn = (current_state == STATE_INPUT) ? 1'b0 : btn_reset_logic;
+  assign fsm_safe_reset_btn = (current_state == STATE_INPUT) ? 1'b0 : btn_esc_combined;
 
   main_fsm u_fsm (
       .clk        (clk),
       .rst_n      (rst_n),
       .sw_mode_sel(sw_mode_sel),
-      .btn_confirm(btn_confirm),
+      .btn_confirm(btn_confirm_combined),
 
       .input_done   (input_done),
       .gen_done     (gen_done),
@@ -268,8 +280,8 @@ module system_core (
       .rst_n(rst_n),
       .start_en(current_state == STATE_SETTINGS),
       .sw_val(sw_scalar_val),
-      .btn_confirm(btn_confirm),
-      .btn_esc(btn_reset_logic),
+      .btn_confirm(btn_confirm_combined),
+      .btn_esc(btn_esc_combined),
       .cfg_err_countdown(cfg_err_countdown),
       .cfg_val_min(cfg_val_min),
       .cfg_val_max(cfg_val_max),
@@ -290,7 +302,7 @@ module system_core (
       .start_en(current_state == STATE_INPUT),
       .rx_data(rx_byte),
       .rx_done(rx_valid),
-      .btn_exit_input(btn_esc),
+      .btn_exit_input(btn_esc_combined),
       .cfg_val_min(cfg_val_min),
       .cfg_val_max(cfg_val_max),
       .err(inp_err),
@@ -351,7 +363,7 @@ module system_core (
       .seg_blink(gen_seg_b),
 
       // Control Signals
-      .btn_exit_gen(btn_esc),
+      .btn_exit_gen(btn_esc_combined),
       .gen_done(gen_done),
       .gen_err(gen_err)
   );
@@ -369,7 +381,7 @@ module system_core (
       .start_en(current_state == STATE_DISPLAY),
       .rx_data(rx_byte),
       .rx_done(rx_valid),
-      .btn_quit(btn_reset_logic),
+      .btn_quit(btn_esc_combined),
       // Slave Mode
       .ext_en(disp_ext_en),
       .ext_cmd(disp_ext_cmd),
@@ -409,8 +421,8 @@ module system_core (
       .start_en(current_state == STATE_CALC),
       .sw_mode_sel(sw_mode_sel),
       .scalar_val_in(sw_scalar_val),
-      .btn_confirm(btn_confirm),
-      .btn_esc(btn_reset_logic),
+      .btn_confirm(btn_confirm_combined),
+      .btn_esc(btn_esc_combined),
       .rx_data(rx_byte),
       .rx_done(rx_valid),
 
